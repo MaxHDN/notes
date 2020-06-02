@@ -1,6 +1,159 @@
- ## Mybatis框架
+# Mybatis
 
-### 一、框架
+## 一、第一部分 自定义持久层框架
+
+思路： 原生JDBC访问数据库的步骤
+
+​			分析JDBC操作数据库的问题
+
+​			问题的解决思路
+
+​			自定义框架设计（功能层面设计）
+
+​			自定义框架实现（代码层面实现）
+
+​			自定义框架优化  
+
+### 1.1 原生JDBC访问数据库的步骤
+
+~~~java
+public static void main(String[] args) {
+        Connection connection = null;
+        PreparedStatement preparedStatement = null;
+        ResultSet resultSet = null;
+        try {
+            // 加载数据库驱动
+            Class.forName("com.mysql.jdbc.Driver");
+            // 通过DriverManager获取数据库连接
+            connection =
+                    DriverManager.getConnection("jdbc:mysql://localhost:3306/mybatis?characterEncoding = utf - 8", " root", " root");
+            // 定义sql语句，“？”表示占位符
+            String sql = "select * from user where username = ?";
+            // 获取预处理PreparedStatement
+            preparedStatement = connection.prepareStatement(sql);
+            // 设置参数，sql语句占位符号?，序号从1开始
+            preparedStatement.setString(1, "tom");
+            // 执行sql语句，获取结果集。
+            resultSet = preparedStatement.executeQuery();
+            // 遍历结果集
+            while (resultSet.next()) {
+                int id = resultSet.getInt("id");
+                String username = resultSet.getString("username");
+                // 封装结果集到实体对象User
+                User user = new User();
+                user.setId(id);
+                user.setUsername(username);
+                System.out.println(user);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            // 释放资源
+            if (resultSet != null) {
+                try {
+                    resultSet.close();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }
+            if (preparedStatement != null) {
+                try {
+                    preparedStatement.close();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }
+            if (connection != null) {
+                try {
+                    connection.close();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+~~~
+
+###  1.2 原生JDBC方式访问数据库问题
+
+* 数据连接配置信息硬编码。
+
+* 频繁创建/关闭数据库连接，影响数据库和应用的性能
+
+* sql语句写在代码中硬编码，不易维护。实际应用中，业务经常改，造成sql脚本经常变，维护成本高。
+
+* sql语s句设置参数麻烦，因为sql语句的where条件不一定，可能多也可能少，占位符需要和参数一一对应
+
+* 结果集解析硬编码，sql变化会导致解析代码变化。
+
+### 1.3 问题解决思路
+
+* 数据库配置信息、sql语句：使用配置文件
+
+* 频繁的创建/关闭数据库连接：使用数据库连接池
+* sql语句设置参数、结果解析：使用反射、内省
+
+### 1.4 自定义持久层框架设计、实现及优化
+
+* 应用程序（框架的使用端）
+
+  使用配置文件来提供两部分配置信息： 数据库配置信息、sql配置信息
+
+  （1）核心配置文件SqlMapConfig.xml：存放数据库配置信息、存放xxxMapper.xml文件路径
+
+  （2）sql语句配置信息xxxMapper.xml：存放sql语句相关信息(sql语句、参数类型、返回结果类型)
+
+* 自定义持久层框架思路
+
+  （1）加载配置文件：根据配置文件的路径，加载配置文件成输入字节流，存储在内存中
+
+  ​			创建Resources类 ，方法 InputStream getResourceAsStream(String path);
+
+  （2）创建两个JavaBean：容器对象，用来存放从配置文件中解析出来的配置信息
+
+  ​		    Configuration：核心配置类，存放从sqlMapConsfig.xml解析出来的配置信息
+
+  ​            MappedStatment：sql映射配置类，存放从xxxMapper.xml配置出来的内容
+
+  （3）解析配置文件：使用dom4j
+
+  ​		  创建类SqlSessionFactoryBuilder 和方法SqlSessionFactory Build(InputStream inputStream)
+
+  ​		  方法build()内部逻辑：
+
+  ​		  Ⅰ、使用dom4J解析配置文件，将解析出来的的内容存放到容器对象中。
+
+  ​		  Ⅱ、创建SqlSessionFactory对象用来生产SqlSession会话对象（工厂模式）
+
+  （4）创建SqlSessionFactory接口以及实现类DefaultSqlSessionFactory
+
+  ​		  定义抽象方法openSession()，并在实现类中重写方法，生产SqlSession会话对象
+
+  （5）创建SqlSession接口以及实现类DefaultSqlSession
+
+  ​			定义数据库的操作: selectList(String statementid,Object... params)
+
+  ​										     selectOne(String statementid,Object... params)
+
+  ​									         update(...)
+
+  ​										     insert(...)
+
+  （6）创建Executor接口及实现类SimpleExecutor实现类
+
+  ​			query(Configuration configuration,MappedStatement mappedStatement,Object... params) 
+
+  ​             执行具体的JDBC代码（本质是对JDBC代码的封装）
+
+   （7）涉及到的设计模式，建造者模式、工厂模式、动态代理模式
+
+  
+
+* 自定义框架的实现及优化
+
+  见 github 工程 IPersitence、IPersistence_Test
+
+## 一、框架
 
 #### 1、框架是什么（背景描述）
 
@@ -21,9 +174,7 @@
 * 场景（用在哪里）：在企业级项目中使用（适合就好，避免大炮打蚊子，步枪打航母）
 * 步骤（怎么用）：工程中引入一jar包、通过配置xml定制框架运行细节、在java程序中调用框架API
 
-
-
-### 二、软件分层
+## 二、软件分层
 
 #### 1、分层是什么
 
@@ -56,11 +207,56 @@
 * service层：spring（对象容器）
 * web表现层：springmvc
 
+## 三、Mybatis框架
 
+思路： Java操作数据库通过JDBC的方式
 
-### 三、Mybatis框架
+​			分析JDBC操作数据库的问题和弊端
 
-### 0、自定义持久层框架设计思路
+​			问题的解决思路
+
+​			自定义框架设计（功能层面设计）
+
+​			自定义框架实现（代码层面实现）
+
+​			自定义框架优化  
+
+#### 0、原生JDBC访问数据库的步骤
+
+~~~
+1、加载数据驱动          Class.forName("com.mysql.jdbc.Driver")
+2、获取连接     DriverManager.getConnection(url, user, password)
+3、编写sql语句          String sql = "select * from user"
+4、创建Statement/PrepareStatement对象 Connection.prepareStatement(sql)
+5、设置参数
+6、执行sql脚本，获取返回结果          Statement.executeQuery()等
+7、处理返回结果           
+8、关闭资源
+~~~
+
+#### 1、原生JDBC方式访问数据库问题
+
+* 数据连接配置信息硬编码，耦合性高。
+
+  解决方式：使用配置文件，与java代码分离。（SqlMapConfig.xml）
+
+* 频繁获取/释放数据库连接，影响数据库和应用性能
+
+  解决方式：使用数据库连接池技术（在SqlMapConfig.xml中配置数据连接池，使用连接池管理数据库连接）
+
+* sql语句写在代码中硬编码，不易维护。实际应用中，业务经常改，造成sql脚本经常变，维护成本高。
+
+  解决方式：将SQL语句配置在XXXmapper.xml文件中，与java代码分离。
+
+* 向Sql语句传参数麻烦，因为Sql语句的where条件不一定，可能多也可能少，占位符需要和参数一一对应
+
+  解决方案：Mybatis自动将Java对象映射至Sql语句，通过statement中的parameterType定义输入参数的类型。
+
+* 结果集解析麻烦，Sql变化会导致解析代码变化，如果能将数据库记录封装成Pojo对象解析比较方便。
+
+  解决方案：Mybatis自动将Sql执行结果映射至Java对象，通过statement中的resultType定义输出结果的类型
+
+#### 2、自定义持久层框架设计思路、实现及优化
 
 * 使用端（项目）：引入自定义持久层jar包
 
@@ -70,9 +266,9 @@
 
   （1）核心配置文件SqlMapConfig.xml：存放数据库配置信息、存放xxxMapper.xml文件路径
 
-  （2）Sql语句配置信息：存放Sql相关信息
+  （2）Sql语句配置信息xxxMapper.xml：存放Sql相关信息
 
-* 自定义持久层框架本身：本质是对JDBC代码的封装
+* 自定义持久层框架思路：本质是对JDBC代码的封装
 
   （1）加载配置文件：根据配置文件的路径，加载配置文件成输入字节流，存储在内存中
 
@@ -98,13 +294,13 @@
 
   （5）创建SqlSession接口以及实现类DefaultSqlSession
 
-  ​			定义数据的操作: selectList()
+  ​			定义数据的操作: selectList(String statementid,Object... params)
 
-  ​										 selectOne()
+  ​										 selectOne(String statementid,Object... params)
 
-  ​									     update()
+  ​									     update(...)
 
-  ​										 insert()
+  ​										 insert(...)
 
   （6）创建Executor接口及实现类SimpleExecutor实现类
 
@@ -112,40 +308,9 @@
 
   ​             执行具体的JDBC代码
 
+* 框架的实现及优化见github工程IPersitence、IPersistence_Test
 
 
-#### 1、原生JDBC访问数据库的步骤
-
-~~~
-1、加载数据驱动          Class.forName("com.mysql.jdbc.Driver")
-2、获取连接     DriverManager.getConnection(url, user, password)
-3、编写sql语句          String sql = "select * from user"
-4、创建Statement/PrepareStatement对象 Connection.prepareStatement(sql)
-5、设置参数
-6、执行sql脚本，获取返回结果          Statement.executeQuery()等
-7、处理返回结果           
-8、关闭资源
-~~~
-
-#### 2、原生JDBC方式访问数据库缺点
-
-* 数据连接配置信息硬编码
-
-* 频繁获取/释放数据库连接，影响数据库和应用性能
-
-  解决方式：使用数据库连接池技术，在SqlMapConfig.xml中配置数据连接池，使用连接池管理数据库连接
-
-* sql语句写在代码中，不易维护。实际应用中，业务经常改，造成sql脚本经常变，维护成本高。
-
-  解决方式：将SQL语句配置在XXXmapper.xml文件中，与java代码分离。
-
-* 向Sql语句传参数麻烦，因为Sql语句的where条件不一定，可能多也可能少，占位符需要和参数一一对应
-
-  解决方案：Mybatis自动将Java对象映射至Sql语句，通过statement中的parameterType定义输入参数的类型。
-
-* 结果集解析麻烦，Sql变化会导致解析代码变化，如果能将数据库记录封装成Pojo对象解析比较方便。
-
-  解决方案：Mybatis自动将Sql执行结果映射至Java对象，通过statement中的resultType定义输出结果的类型
 
 #### 3、ORM思想
 
@@ -186,7 +351,7 @@
 
 #### 15、Tomcat配置JNDI数据源
 
-### 四、扩展知识
+## 四、扩展知识
 
 #### 1、元数据
 
