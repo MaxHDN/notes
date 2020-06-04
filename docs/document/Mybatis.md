@@ -370,6 +370,8 @@ public class UserDaoImpl implements UserDao {
   * mappers映射器
     * mapper 映射
       * resource属性
+    * package 
+      * name属性
 
 2） MyBatis常用配置解析
 
@@ -397,8 +399,15 @@ public class UserDaoImpl implements UserDao {
   * 使用相对于类路径的资源引用，例如：
   * 使用完全限定资源定位符（URL）,例如：
   * 使用映射器接口实现类的完全限定名，例如：
-
   * 将包内的映射器接口实现完全注册为映射器，例如
+
+* **package**标签
+
+  package标签，通过name属性指定mapper接口所在的包名，但是**对应的映射文件必须与接口位于同一路径下，并且名称相同**（mapper标签引入单个没有这个要求）
+
+  比如接口： com.daonian.practice.mybatis.mapper.IUserMapper
+
+  对应配置文件所在包必须是：com/daonian/practice/mybatis/mapper
 
 * **properties** 标签
 
