@@ -1098,7 +1098,7 @@ MyBatis的返回参数类型分两种:<resultType>、<resultMap>
 
 
 
-#### 
+
 
 #### 7、Mybatis输入参数类型和结果类型
 
