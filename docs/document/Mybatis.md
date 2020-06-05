@@ -413,7 +413,7 @@ public class UserDaoImpl implements UserDao {
 
   习惯将数据源的配置信息单独抽取成一个properties文件，该标签可以加载一个properties文件。
 
-  ![image-20200604162304575](E:\lagou\高级工程师训练营\学习笔记\docs\img-folder\image-properties标签.png)
+  ![image-20200604162304575](..\img-folder\image-properties标签.png)
 
 * **typeAliases** 标签
 
@@ -439,7 +439,7 @@ public class UserDaoImpl implements UserDao {
 
   例如：为一个java类全限定名设置一个别名，原来配置如下
 
-  ![image-20200604162720731](C:\Users\rice\AppData\Roaming\Typora\typora-user-images\image-20200604162720731.png)
+  ![image-20200604162720731](..\img-folder\image-20200604162720731.png)
 
   配置typeAliases，为com.daonian.domain.User定义别名user
 
