@@ -149,7 +149,7 @@ public static void main(String[] args) {
 
   
 
-* 自定义框架的实现及优化
+* 自定义框架的代码实现及优化
 
   见 github 工程 IPersitence、IPersistence_Test
 
@@ -350,6 +350,8 @@ public class UserDaoImpl implements UserDao {
 
 ​		原始Dao开放方式和Mapper动态代理开发方式在企业中都很常见，**推荐使用Mapper动态代理开发模式**。
 
+
+
 ### 5.2 MyBatis配置文件
 
 #### 5.2.1 sqlMapConfig.xml
@@ -477,23 +479,25 @@ public class UserDaoImpl implements UserDao {
 
 #### 5.2.2 xxxMapper.xml
 
-1）**配置文件分析**
+##### 5.2.2.1 **配置文件分析**
 
 ![image-20200604154332276](..\img-folder\image-sqlMapConfig配置文件分析.png)
 
-2）**动态sql语句**
+##### 5.2.2.2 **动态sql语句**
 
 ​		前面我们的SQL语句都是比较简单的，业务逻辑较复杂的时候，SQL是动态变化的，此时简单的SQL语句就不能满足业务需求。MyBatis官方文件对动态sql的描述如下：
 
 ![image-20200604163658833](..\img-folder\image-20200604163658833.png)
 
-* 动态SQL之<if>、<where>	**多条件组合查询**
+* 动态SQL之**多条件组合查询** -  <if>标签、<where>标签	
+
+  **<where>标签**：where标签会自动自动添加where关键字，并且去掉紧跟其后的第一个 and 或者 or。如果不使用where标签，sql语句中where后面第一个条件应该是where 1=1。
+
+  **<if>标签**：分支判断，根据test="逻辑判断"的值，来拼接sql语句。
 
   根据参数的不同，使用不同的SQL语句来进行查询。比如在id不为空时可以根据id查询，如果username不为空还要加入用户名作为条件
 
-  <if>分支逻辑
-
-  <where>自动去掉第一个条件签名的”and“，如果不使用<where>，whered的第一个条件应该是where 1=1
+  
 
   ~~~xml
   <select id="findByCondition" parameterType="user" resultType="user">
@@ -509,7 +513,7 @@ public class UserDaoImpl implements UserDao {
   </select>
   ~~~
 
-* 动态SQL之<foreach> **多值条件查询**
+* 动态SQL之 **多值条件查询** - <foreach>
 
   参考资料：[mybatis之foreach用法](https://www.cnblogs.com/fnlingnzb-learner/p/10566452.html)
 
@@ -528,12 +532,13 @@ public class UserDaoImpl implements UserDao {
 
   foreach元素的属性主要有item，index，collection，open，separator，close。
 
-  - **item：**集合中元素迭代时的别名，该参数为必选。
-  - **index**：在list和数组中,index是元素的序号，在map中，index是元素的key，该参数可选
-  - **open**：foreach代码的开始符号，一般是(和close=")"合用。常用在in(),values()时。该参数可选
+  * **collection:** 要做foreach的对象，作为入参时，List对象默认用"list"代替作为键，数组对象有"array"代替作为键，Map对象没有默认的键。当然在作为入参时可以使用@Param("keyName")来设置键，设置keyName后，list,array将会失效。 除了入参这种情况外，还有一种作为参数对象的某个字段的时候。举个例子：如果User有属性List ids。入参是User对象，那么这个collection = "ids".***如果User有属性Ids ids;其中Ids是个对象，Ids有个属性List id;入参是User对象，那么collection = "ids.id"***
+
+  - **open** ：foreach代码的开始符号，一般是(和close=")"合用。常用在in(),values()时。该参数可选
+  - **close** ：foreach代码的关闭符号，一般是)和open="("合用。常用在in(),values()时。该参数可选。
+  - **item**： 集合中元素迭代时的别名，该参数为必选。
   - **separator**：元素之间的分隔符，例如在in()的时候，separator=","会自动在元素中间用“,“隔开，避免手动输入逗号导致sql错误，如in(1,2,)这样。该参数可选。
-  - **close:** foreach代码的关闭符号，一般是)和open="("合用。常用在in(),values()时。该参数可选。
-  - **collection:** 要做foreach的对象，作为入参时，List对象默认用"list"代替作为键，数组对象有"array"代替作为键，Map对象没有默认的键。当然在作为入参时可以使用@Param("keyName")来设置键，设置keyName后，list,array将会失效。 除了入参这种情况外，还有一种作为参数对象的某个字段的时候。举个例子：如果User有属性List ids。入参是User对象，那么这个collection = "ids".***如果User有属性Ids ids;其中Ids是个对象，Ids有个属性List id;入参是User对象，那么collection = "ids.id"***
+  - **index**：在list和数组中,index是元素的序号，在map中，index是元素的key，该参数可选
 
   在使用foreach的时候最关键的也是最容易出错的就是collection属性，该属性是必须指定的，但是在不同情况下，该属性的值是不一样的，主要有一下3种情况： 
 
@@ -547,33 +552,475 @@ public class UserDaoImpl implements UserDao {
 
   所以，不管是多参数还是单参数的list,array类型，都可以封装为map进行传递。如果传递的是一个List，则mybatis会封装为一个list为key，list值为object的map，如果是array，则封装成一个array为key，array的值为object的map，如果自己封装呢，则colloection里放的是自己封装的map里的key值。
 
+  
 
+  **源码分析**
 
-3）SQL片段抽取
+  由于官方文档对这块的使用，描述的比较简短，细节上也被忽略掉了(可能是开源项目文档一贯的问题吧)，也使用不少同学在使用中遇到了问题。特别是foreach这个函数中，collection属性做什么用，有什么注意事项。由于文档不全，这块只能通过源代码剖析的方式来分析一下各个属性的相关要求。
 
-可以使用<sql> 标签，将重复的sql提取出来，使用时用include引用即可，最终达到复用sql的目的。
+  collection属性的用途是接收输入的数组或是List接口实现。但对于其名称的要求，Mybatis在实现中还是有点不好理解的，所以需要特别注意这一点。
 
-~~~xml
-<!--提取重复的sql片段-->
-<sql id="selectUser" select * from User</sql>
+  下面开始分析源代码(笔记使用的是Mybatis 3.0.5版本)
 
-<select id="findById" parameterType="int" resultType="user">
-	<include refid="selectUser"></include> where id=#{id}
-</select>
+  先找到Mybatis执行SQL配置解析的入口，MapperMethod.java类中 public Object execute(Object[] args) 该方法是执行的入口。针对in集合查询，对应用就是 selectForList或SelctForMap方法。
 
-<select id="findByIds" parameterType="list" resultType="user">
-    <include refid="selectUser"></include>
-    <where>
-        <foreach collection="list" open="id in(" close=")" item="id" separator=",">
-        	#{id}
-        </foreach>
-    </where>
-</select>
+  ![img](..\img-folder\1000464-20190320173657220-1615038745.png)
+
+  但不管调用哪个方法，都会对原来传入Object[]类型的参数args 进行处理，通过 getParam方法转换成一个Object,那这个方法是做什么的呢？分析源码如下：
+
+![img](..\img-folder\1000464-20190320173731188-273615511.png)
+
+上图中标红的两处，很惊讶的发现，一个参数与多个参数的处理方式是不同的(后续很多同学遇到的问题，就有一大部分出自这个地方)。如果参数个数大于一个，则会被封装成Map, key值如果使用了Mybatis的 Param注解，则会使用该key值，否则默认统一使用数据序号,从1开始（新版本从param1,param2,..依次）。这个问题先记下，继续分析代码，接下来如果是selectForList操作(其它操作就对应用相应方法),会调用DefaultSqlSession的public List selectList(String statement, Object parameter, RowBounds rowBounds) 方法
+
+又一个发现，见源代码如下：
+
+![img](..\img-folder\1000464-20190320173752320-237995715.png)
+
+上图标红部分，对参数又做了一次封装，我们看一下代码
+
+![img](..\img-folder\1000464-20190320173803697-949044115.png)
+
+现在有点清楚了，如果参数类型是List,则必须在collecion中指定为list, 如果是数据组，则必须在collection属性中指定为 array.
+
+现在就问题就比较清楚了，如果是一个参数的话，collection的值取决于你的参数类型。
+
+如果是多个值的话，除非使用注解Param指定，否则都是数字开头，所以在collection中指定什么值都是无用的。下图是debug显示结果。
+
+![img](..\img-folder\1000464-20190320173836786-932705696.png)
+
+##### 5.2.2.3 输入参数类型
+
+**0）输入参数标签<parameterType>**
+
+* parameterType有基本数据类型和复杂的数据类型。
+  * 基本数据类型：int、string、long、Date;
+  * 复杂数据类型：类（JavaBean）、数组、集合、Map
+
+* 获取方式
+  * 基本数据类型：#{value}或${value} 获取参数中的值
+  * 复杂数据类型：#{属性名}或${属性名} ，map中则是#{key}或${key}
+
+* #{}与${}的区别
+  * #{value}：输入参数的占位符，相当于jdbc的 ？ 防sql注入  自动添加了 ''引号
+  * ${value}:  不防注入，就是字符串拼接 ，不自动添加 '' 引号
+
+**1）基本类型的单个参数传递**
+
+~~~java
+// 单个传参 mapper接口
+void deleteById(Integer id);
 ~~~
 
-4）<resultMap>标签
+```xml
+<!--mapper.xml，当用#{}获取参数值时，中括号里的值可以任意字符串，但是一般建议和表中的字段一致，容易阅读-->
+<delete id="deleteById" parameterType="int">
+    delete from user where id = #{id}
+</delete>
+```
 
-​	resultMap是Mybatis一个强大的标签，它可以将查询到的复杂数据（比如查询到几个表中数据）映射到一个结果集当中。
+```java
+// 测试单个参数传参
+@Test
+public void testDeleteById(){
+    userMapper.deleteById(3);
+    sqlSession.commit();
+}
+```
+
+**2）顺序传递参数（没有使用@Param）**
+
+~~~java
+//顺序传参 mapper接口
+List<MybatisUser> findByIdAndUsername(int id, String username);
+~~~
+
+```xml
+<!--顺序传参mapper.xml-->
+<select id="findByIdAndUsername"  resultType="mybatisUser">
+    select * from user
+    <where>
+        <if test="id != 0">
+            and id = #{id}
+        </if>
+        <if test="username != null">
+            and username = #{username}
+        </if>
+    </where>
+</select>
+```
+
+**注意**，这里按参数名去引用的话会报如下错误，mybatis错误提示很细致，这里明确给我们提示，参数只能使用arg1, arg0, param1, param2 类似的参数名获取。这种传参方式的缺点是不够灵活，必须严格按照参数顺序来引用。
+
+![image-20200605152938352](..\img-folder\image-20200605152938352.png)
+
+所以正确的的获取参数的方式如下
+
+```xml
+<!--顺序传参mapper.xml-->
+<select id="findByIdAndUsername"  resultType="mybatisUser">
+    select * from user
+    <where>
+        <if test="id != 0">
+            and id = #{param1}
+        </if>
+        <if test="username != null">
+            and username = #{param2}
+        </if>
+    </where>
+</select>
+```
+
+```java
+// 测试使用顺序传参
+@Test
+public void testFindByIdAndUsername(){
+    List<MybatisUser> mybatisUsers = userMapper.findByIdAndUsername(1, "张三");
+    for (MybatisUser mybatisUser : mybatisUsers) {
+        System.out.println(mybatisUser);
+    }
+}
+```
+
+**3）使用@param注解方式**
+
+```java
+//使用@Param注解方式传参
+List<MybatisUser> findByIdAndUsernameUserParam(@Param("id") int id, @Param("username") String username);
+```
+
+```xml
+<!--使用@Param注解传参-->
+<select id="findByIdAndUsernameUserParam"  resultType="mybatisUser">
+    select * from user
+    <where>
+        <if test="id != 0">
+            and id = #{id}
+        </if>
+        <if test="username != null">
+            and username = #{username}
+        </if>
+    </where>
+</select>
+```
+
+```java
+// 测试使用@param的方式传递参数
+@Test
+    public void testFindByIdAndUsername2(){
+        List<MybatisUser> mybatisUsers = userMapper.findByIdAndUsernameUserParam(1, "张三");
+        for (MybatisUser mybatisUser : mybatisUsers) {
+            System.out.println(mybatisUser);
+        }
+    }
+```
+
+使用@Param注解，就是告诉mybatis参数的名字，在xml中就可以按照参数名去引用了
+
+**4）使用Map传递参数**
+
+```java
+// 使用map方式传递参数
+List<MybatisUser> findByIdAndUsernameUseMap(Map paramMap);
+```
+
+```xml
+<!--使用map方式传递参数-->
+<select id="findByIdAndUsernameUseMap"  resultType="mybatisUser">
+    select * from user  where id = #{id} and username = #{username}
+</select>
+```
+
+```java
+// 测试使用map的方式传参
+@Test
+public void findByIdAndUsernameUseMap(){
+    Map<String,Object> map = new HashMap<>();
+    map.put("id",1);
+    map.put("username","张三");
+    List<MybatisUser> mybatisUsers = userMapper.findByIdAndUsernameUseMap(map);
+    for (MybatisUser mybatisUser : mybatisUsers) {
+        System.out.println(mybatisUser);
+    }
+}
+```
+
+实际开发中使用map来传递多个参数是一种推荐的方式,使用map中的key获取参数的值，
+
+例如：#{id}用来获取id的值，#{username}用来获取用户名的值
+
+
+
+**5）使用JSON对象方式传递参数**
+
+```java
+// 使用JSON对象方式传递参数
+List<MybatisUser> findByIdAndUsernameUseJsonObject(JSONObject jsonObject);
+```
+
+```xml
+<!--使用JSON方式传递参数-->
+<select id="findByIdAndUsernameUseJsonObject"  resultType="mybatisUser">
+    select * from user  where id = #{id} and username = #{username}
+</select>
+```
+
+```java
+// 测试使用JSON对象的方式传递参数
+@Test
+public void findByIdAndUsernameUseJsonObject(){
+    JSONObject jsonObject = new JSONObject();
+    jsonObject.put("id",1);
+    jsonObject.put("username","张三");
+    List<MybatisUser> mybatisUsers = userMapper.findByIdAndUsernameUseJsonObject(jsonObject);
+    for (MybatisUser mybatisUser : mybatisUsers) {
+        System.out.println(mybatisUser);
+    }
+}
+```
+
+**6）传递集合类型参数List、Set，数组类型参数Array**
+
+在一些复杂的查询中（如 sql中的 in操作），传统的参数传递已无法满足需求，这时候就要用到List、Set、Array类型的参数传递
+
+* **使用List集合的方式传递参数**
+
+  ~~~java
+  //使用List集合的方式传递参数
+  // <foreach>多值查询
+  List<MybatisUser> findByIdsUseList(List<Integer> list);
+  ~~~
+
+  ~~~xml
+  <!--使用集合的方式传递参数-->
+  <!--open = "and id in", where标签会把where后第一个and优化掉 -->
+  <select id="findByIdsUseList" parameterType="list" resultType="mybatisUser">
+      select * from user
+      <where>
+          <foreach collection="list" open=" and id in (" close=")" item="id" separator=",">
+              #{id}
+          </foreach>
+      </where>
+  </select>
+  ~~~
+
+  ~~~java
+  // 测试使用集合的方式传递参数
+  @Test
+  public void testFindByIdsUseList(){
+      List<Integer> list = new ArrayList<>();
+      list.add(1);
+      list.add(2);
+      List<MybatisUser> users = userMapper.findByIdsUseList(list);
+      for (MybatisUser user : users) {
+          System.out.println(user);
+      }
+  }
+  ~~~
+
+  
+
+* **使用Set集合的方式传递参数**
+
+  ~~~java
+  //使用Set集合的方式传递参数,mapper接口
+  List<MybatisUser> findByIdsUseSet(Set<Integer> set);
+  ~~~
+
+  ~~~xml
+  <!--使用Set集合的方式传递参数-->
+  <select id="findByIdsUseSet" parameterType="collection" resultType="mybatisUser">
+      select * from user
+      <where>
+          <foreach collection="collection" open=" and id in (" close=")" item="id" separator=",">
+              #{id}
+          </foreach>
+      </where>
+  </select>
+  ~~~
+
+  ```java
+  //测试使用Set集合方式传递参数
+  @Test
+  public void testFindByIdsUseSet(){
+      Set<Integer> set = new HashSet<>();
+      set.add(1);
+      set.add(2);
+      List<MybatisUser> users = userMapper.findByIdsUseSet(set);
+      for (MybatisUser user : users) {
+          System.out.println(user);
+      }
+  }
+  ```
+
+  ​	使用Set集合方式的，paramterType可以为“collection”或者“java.util.Set”
+
+* **使用Array数组方式传递参数**
+
+  ~~~java
+  // 使用Array数组的方式传递参数
+  List<MybatisUser> findByIdsUseArray(Integer[] intArr);
+  
+  //使用Array数组的方式传递参数,String[]
+  List<MybatisUser> findByIdsUseArrayString(String[] strArr);
+  ~~~
+
+  ```xml
+  <!--使用Array数组的方式传递参数-->
+  <select id="findByIdsUseArray" parameterType="int[]" resultType="mybatisUser">
+      select * from user
+      <where>
+          <foreach collection="array" open=" and id in (" close=")" item="id" separator=",">
+              #{id}
+          </foreach>
+      </where>
+  </select>
+  
+  <!--使用Array集合的方式传递参数,String[]-->
+  <select id="findByIdsUseArrayString" parameterType="object[]" resultType="mybatisUser">
+          select * from user
+          <where>
+              <foreach collection="array" open=" and username in (" close=")" item="id" separator=",">
+                  #{id}
+              </foreach>
+          </where>
+      </select>
+  ```
+
+  ```java
+  // 测试使用Array数组的方式传递参数
+  @Test
+  public void testFindByIdsUseArray(){
+      Integer[] intarra = new Integer[2];
+      intarra[0] = 1;
+      intarra[1] = 2;
+      List<MybatisUser> users = userMapper.findByIdsUseArray(intarra);
+      for (MybatisUser user : users) {
+          System.out.println(user);
+      }
+  }
+  
+  @Test
+      public void testFindByIdsUseArrayString(){
+          String[] strArr = new String[2];
+          strArr[0] = "张三";
+          strArr[1] = "tom";
+          List<MybatisUser> users = userMapper.findByIdsUseArrayString(strArr);
+          for (MybatisUser user : users) {
+              System.out.println(user);
+          }
+      }
+  ```
+
+* 小结
+
+  实际使用发现，有些方式paramterType参数可不需要填写（实际使用确实不需要，但是未经源码代码证实，为啥不需要）
+
+  从下图MyBatis源码可以看出：
+
+  * 当传入时List集合时，mybatis会将list集合对象，以“list”为key，存放到map中。在获取list的引用时，通过collection="list"来获取list对象。parameterType="list"
+
+  * 当传入时Set集合时，mybatis会将Sett集合对象，以“collection”为key，存放到map中。在获取list的引用时，通过collection="collection"来获取Set集合对象。
+
+    传递的是Integer数组对象时，parameterType="int[]"或者parameterType="Integer[]"
+
+    同理String数组对象，parameterType="string[]"
+
+  * 当传入时Array数组时，mybatis会将Array数组，以“array"为key，存放到map中，在获取Array数组的引用时，通过collection="array”来获取Array数组对象。
+
+![image-20200605170859506](..\img-folder\image-20200605170859506.png)
+
+
+
+
+
+**7) 使用java bean传递参数**
+
+​        也可以使用bean的方式来传递多个参数，使用时parameterType指定为对应的bean类型即可，这种传参方式的优点是比较方便，controller层使用@RequestBody接收到实体类参数后，直接传递给mapper层调用即可，不需要在进行参数的转换。
+
+~~~java
+    //使用JavaBean传参
+    void updatePasswordById(MybatisUser user);
+~~~
+
+~~~xml
+    <!-- 使用JavaBean传参 update user -->
+    <update id="updatePasswordById" parameterType="MybatisUser">
+        update user set password = #{password} where id = #{id}
+    </update>
+~~~
+
+~~~java
+    //测试使用JavaBean传参
+    @Test
+    public void testUpdatePasswordById(){
+        MybatisUser user = new MybatisUser();
+        user.setId(3);
+        user.setPassword("321");
+        userMapper.updatePasswordById(user);
+        sqlSession.commit();
+    }
+~~~
+
+
+
+**8）参数类型为JavaBean中含有JaveBean、集合、数组等方式传参）**
+
+~~~java
+    // 用JaveBean中含有JavaBean、List等的方式传参
+    List<MybatisUser> findByPasswordsUseJavaBeanObject(ParamBeanObject paramBeanObject);
+~~~
+
+~~~xml
+    <!-- 使用JaveBean中含有JavaBean、List等的方式传参 -->
+    <select id="findByPasswordsUseJavaBeanObject" parameterType="com.daonian.practice.mybatis.pojo.ParamBeanObject" resultType="mybatisUser">
+        select * from user 
+        <where>
+            <foreach collection="passwords" open=" password in (" close=")" separator="," item="password">
+                #{password}
+            </foreach>
+
+            and id = #{mybatisUser.id}
+        </where>
+    </select>
+~~~
+
+~~~java
+    // 测试使用JaveBean含有List的方式传参
+    @Test
+    public void testFindByPasswordsUseJavaBeanObject(){
+        ParamBeanObject paramBeanObject = new ParamBeanObject();
+
+        List<String> list = new ArrayList<>(Arrays.asList("123","321","12"));
+        paramBeanObject.setPasswords(list);
+
+        MybatisUser mybatisUser = new MybatisUser();
+        mybatisUser.setId(1);
+        paramBeanObject.setMybatisUser(mybatisUser);
+
+        List<MybatisUser> mybatisUsers = userMapper.findByPasswordsUseJavaBeanObject(paramBeanObject);
+        for (MybatisUser user : mybatisUsers) {
+            System.out.println(user);
+        }
+    }
+~~~
+
+
+
+##### 5.2.2.4 返回结果类型
+
+MyBatis的返回参数类型分两种:<resultType>、<resultMap>
+
+对应的返回值类型
+
+1）resultMap：自定义结果集
+
+2）resultType：int、string、long、对象实体、java.util.Map、...
+
+​	resultMap是Mybatis一个强大的标签，它可以将查询到的复杂数据（比如查询到几个表中数据）映射到一个结果集当中。(具体使用见一对一、一对多、多对多查询)
+
+在MyBatis进行查询映射时，其实查询出来的每一个属性都是放在一个对应的Map里面的，其中键是属性名，值则是其对应的值。
+（1）当提供的返回类型属性是resultType时，MyBatis会将Map里面的键值对取出赋给resultType所指定的对象对应的属性。所以其实MyBatis的每一个查询映射的返回类型都是Map，只是当提供的返回类型属性是resultType的时候，MyBatis自动地把对应的值赋给resultType所指定对象的属性。
+（2） 当提供的返回类型是resultMap时，因为Map不能很好表示领域模型，就需要自己再进一步的把它转化为对应的对象，这常常在复杂查询中很有作用。
 
 ​	resultMap包含的元素
 
@@ -605,7 +1052,33 @@ public class UserDaoImpl implements UserDao {
 
 
 
-**具体案例见一对一、一对多、多对多查询**
+##### 5.2.2.5 **SQL片段抽取**
+
+可以使用<sql> 标签，将重复的sql提取出来，使用时用include引用即可，最终达到复用sql的目的。
+
+~~~xml
+    <!--提取可复用的sql片段-->
+    <sql id="selectUser">select * from user</sql>
+
+    <!-- 使用JaveBean中含有JavaBean、List等的方式传参 -->
+    <select id="findByPasswordsUseJavaBeanObject" parameterType="com.daonian.practice.mybatis.pojo.ParamBeanObject" resultType="mybatisUser">
+        <!--引用sql片段-->
+        <include refid="selectUser"/>
+        <where>
+            <foreach collection="passwords" open=" password in (" close=")" separator="," item="password">
+                #{password}
+            </foreach>
+
+            and id = #{mybatisUser.id}
+        </where>
+    </select>
+~~~
+
+
+
+
+
+
 
 
 
