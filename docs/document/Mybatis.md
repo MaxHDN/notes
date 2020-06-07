@@ -1084,33 +1084,1404 @@ MyBatis的返回参数类型分两种:<resultType>、<resultMap>
 
 ## 第六部分 Mybatis复杂映射开发
 
-### 6.1 一对一查询
+### 6.1 多表关系分析技巧
 
-### 6.2 一对多查询
+**从一条记录出发**，比如分析A表和B表的关系，就看A表的一条记录可以对应B表中几条记录，如果对应一条，从A到B表就是**一对一**的关系，如果对应多条就是**一对多**的关系。**多对多**其实是双向的一对多。
 
-### 6.3 多对多查询
+* 一对一
+
+  从订单表出发到用户表，一条订单记录只会对应用户表的一条记录，一对一
+
+* 一对多
+
+  从用户表出发到订单表，一个用户记录可以对应订单表的多条记录，一对多
+
+  （通过**主外键**，一的一方是主表，多的一方是从表，外键在从表多的那一方）
+
+* 多对多
+
+  用户和角色，一个用户可以有多个角色，一个角色也可以对应多个用户
+
+  通过中间表(用户角色关系表)表达两个表之间的关系
+
+  a表         b表
+
+  id field..    id field..
+
+  中间表（往往两个字段即可）
+
+  aid  bid
+
+### 6.2 准备环境
+
+**核心配置文件，sqlMapperConfig.xml**
+
+~~~xml
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE configuration PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-config.dtd">
+<configuration>
+    <properties resource="com/daonian/practice/mybatis/mybatisJdbc.properties"/>
+
+    <typeAliases>
+        <!-- type：给类定义别名，alias：别名名称-->
+        <typeAlias type="com.daonian.practice.mybatis.pojo.MybatisUser" alias="MybatisUser"/>
+        <typeAlias type="com.daonian.practice.mybatis.pojo.Order" alias="order"/>
+    </typeAliases>
+
+    <environments default="development">
+        <environment id="development">
+            <transactionManager type="JDBC"></transactionManager>
+            <dataSource type="POOLED">
+                <property name="driver" value="${jdbc.driver}"/>
+                <property name="url" value="${jdbc.url}"/>
+                <property name="username" value="${jdbc.username}"/>
+                <property name="password" value="${jdbc.password}"/>
+            </dataSource>
+        </environment>
+    </environments>
+
+    <!-- 引入mapper.xml -->
+    <mappers>
+        <!-- mapper标签引入单个sql语句配置文件-->
+        <mapper resource = "com/daonian/practice/mybatis/dao/quickStartMapper.xml"/>
+        <mapper resource = "com/daonian/practice/mybatis/dao/TraditionIUserMapper.xml"/>
+        <!--<mapper resource = "practice/mybatis/mapper/IUserMapper.xml"/>-->
+        <!--package标签通过name属性指定mapper接口所在的包名，一次引入整个包的sql语句标签-->
+        <package name="com/daonian/practice/mybatis/mapper"/>
+    </mappers>
+
+</configuration>
+~~~
+
+
+
+**用户实体类MybatisUser**
+
+~~~java
+package com.daonian.practice.mybatis.pojo;
+
+import java.util.Date;
+import java.util.List;
+
+public class MybatisUser {
+    private int id;
+    private String username;
+    private String password;
+    private Date birthday;
+
+    private List<Order> orderList;
+
+    private List<Role> roleList;
+
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public Date getBirthday() {
+        return birthday;
+    }
+
+    public void setBirthday(Date birthday) {
+        this.birthday = birthday;
+    }
+
+    public List<Order> getOrderList() {
+        return orderList;
+    }
+
+    public void setOrderList(List<Order> orderList) {
+        this.orderList = orderList;
+    }
+
+    public List<Role> getRoleList() {
+        return roleList;
+    }
+
+    public void setRoleList(List<Role> roleList) {
+        this.roleList = roleList;
+    }
+
+    @Override
+    public String toString() {
+        return "MybatisUser{" +
+                "id=" + id +
+                ", username='" + username + '\'' +
+                ", password='" + password + '\'' +
+                ", birthday=" + birthday +
+                ", orderList=" + orderList +
+                ", roleList=" + roleList +
+                '}';
+    }
+}
+~~~
+
+**订单实体类，Order**
+
+~~~java
+package com.daonian.practice.mybatis.pojo;
+
+import java.util.Date;
+
+public class Order {
+    private int id;
+    private Date ordertime;
+    private Double total;
+    private int uid;
+
+    private MybatisUser user;
+
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public Date getOrdertime() {
+        return ordertime;
+    }
+
+    public void setOrdertime(Date ordertime) {
+        this.ordertime = ordertime;
+    }
+
+    public Double getTotal() {
+        return total;
+    }
+
+    public void setTotal(Double total) {
+        this.total = total;
+    }
+
+    public int getUid() {
+        return uid;
+    }
+
+    public void setUid(int uid) {
+        this.uid = uid;
+    }
+
+    public MybatisUser getUser() {
+        return user;
+    }
+
+    public void setUser(MybatisUser user) {
+        this.user = user;
+    }
+
+    @Override
+    public String toString() {
+        return "Order{" +
+                "id=" + id +
+                ", ordertime=" + ordertime +
+                ", total=" + total +
+                ", uid=" + uid +
+                ", user=" + user +
+                '}';
+    }
+}
+~~~
+
+角色实体类
+
+~~~java
+package com.daonian.practice.mybatis.pojo;
+
+public class Role {
+    private int id;
+    private String rolename;
+    private String roleDesc;
+
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public String getRolename() {
+        return rolename;
+    }
+
+    public void setRolename(String rolename) {
+        this.rolename = rolename;
+    }
+
+    public String getRoleDesc() {
+        return roleDesc;
+    }
+
+    public void setRoleDesc(String roleDesc) {
+        this.roleDesc = roleDesc;
+    }
+
+    @Override
+    public String toString() {
+        return "Role{" +
+                "id=" + id +
+                ", rolename='" + rolename + '\'' +
+                ", roleDesc='" + roleDesc + '\'' +
+                '}';
+    }
+}
+~~~
+
+**sql脚本**
+
+~~~mysql
+-- ----------------------------
+-- Table structure for user
+-- ----------------------------
+DROP TABLE IF EXISTS `user`;
+CREATE TABLE `user`  (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `username` varchar(50) CHARACTER SET utf8 COLLATE utf8_general_ci NULL DEFAULT NULL,
+  `password` varchar(50) CHARACTER SET utf8 COLLATE utf8_general_ci NULL DEFAULT NULL,
+  `birthday` date NULL DEFAULT NULL,
+  PRIMARY KEY (`id`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 4 CHARACTER SET = utf8 COLLATE = utf8_general_ci ROW_FORMAT = Compact;
+
+-- ----------------------------
+-- Records of user
+-- ----------------------------
+INSERT INTO `user` VALUES (1, '张三', '123', '2020-12-11');
+INSERT INTO `user` VALUES (2, 'tom', '123', '2020-11-12');
+
+-- ----------------------------
+-- Table structure for orders
+-- ----------------------------
+DROP TABLE IF EXISTS `orders`;
+CREATE TABLE `orders`  (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `ordertime` date NULL DEFAULT NULL,
+  `total` double NULL DEFAULT NULL,
+  `uid` int(11) NULL DEFAULT NULL,
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `uid`(`uid`) USING BTREE,
+  CONSTRAINT `orders_ibfk_1` FOREIGN KEY (`uid`) REFERENCES `user` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE = InnoDB AUTO_INCREMENT = 4 CHARACTER SET = utf8 COLLATE = utf8_general_ci ROW_FORMAT = Compact;
+
+-- ----------------------------
+-- Records of orders
+-- ----------------------------
+INSERT INTO `orders` VALUES (1, '2019-12-12', 3000, 1);
+INSERT INTO `orders` VALUES (2, '2019-12-12', 4000, 1);
+INSERT INTO `orders` VALUES (3, '2019-12-12', 5000, 2);
+
+-- ----------------------------
+-- Table structure for sys_role
+-- ----------------------------
+DROP TABLE IF EXISTS `sys_role`;
+CREATE TABLE `sys_role`  (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `rolename` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NULL DEFAULT NULL,
+  `roleDesc` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NULL DEFAULT NULL,
+  PRIMARY KEY (`id`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 3 CHARACTER SET = utf8 COLLATE = utf8_general_ci ROW_FORMAT = Compact;
+
+-- ----------------------------
+-- Records of sys_role
+-- ----------------------------
+INSERT INTO `sys_role` VALUES (1, 'CTO', 'CTO');
+INSERT INTO `sys_role` VALUES (2, 'CEO', 'CEO');
+
+
+-- ----------------------------
+-- Table structure for sys_user_role
+-- ----------------------------
+DROP TABLE IF EXISTS `sys_user_role`;
+CREATE TABLE `sys_user_role`  (
+  `userid` int(11) NOT NULL,
+  `roleid` int(11) NOT NULL,
+  PRIMARY KEY (`userid`, `roleid`) USING BTREE,
+  INDEX `roleid`(`roleid`) USING BTREE,
+  CONSTRAINT `sys_user_role_ibfk_1` FOREIGN KEY (`userid`) REFERENCES `sys_role` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `sys_user_role_ibfk_2` FOREIGN KEY (`roleid`) REFERENCES `user` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE = InnoDB CHARACTER SET = utf8 COLLATE = utf8_general_ci ROW_FORMAT = Compact;
+
+-- ----------------------------
+-- Records of sys_user_role
+-- ----------------------------
+INSERT INTO `sys_user_role` VALUES (1, 1);
+INSERT INTO `sys_user_role` VALUES (2, 1);
+INSERT INTO `sys_user_role` VALUES (1, 2);
+INSERT INTO `sys_user_role` VALUES (2, 2);
+~~~
+
+
+
+### 6.3 一对一查询
+
+一对一查询模型：用户表和订单表的关系为，一个用户有多个订单，一个订单只从属于一个用户
+
+一对一查询需求：查询订单，同时查询订单所属的用户信息
+
+~~~java
+    // mapper接口
+	// 一对一查询，一个订单只从属于一个用户
+    // 需求：查询订单，同时查询订单所属的用户信息
+    // 跟下面的区别是，sql语句配置文件中使用的resltMap不同
+    List<Order> findOrderAndUser2();
+
+    // 一对一查询，一个订单只从属于一个用户。
+    // 需求：查询订单，同时查询订单所属的用户信息
+    List<Order> findOrderAndUser();
+~~~
+
+~~~xml
+    <!--sql语句配置文件,xxxMapper.xml-->
+	
+    <!-- id="orderMap" 和 id="orderMap2"两个效果是一样的-->
+    <resultMap id="orderMap2" type="order">
+        <result column="id" property="id"></result>
+        <result column="ordertime" property="ordertime"></result>
+        <result column="total" property="total"></result>
+        <result column="uid" property="id"></result>
+        <association property="user" javaType="MybatisUser">
+            <result column="uid" property="id"></result>
+            <result column="username" property="username"></result>
+            <result column="password" property="password"></result>
+            <result column="birthday" property="birthday"></result>
+        </association>
+    </resultMap>
+
+    <resultMap id="orderMap2" type="order">
+        <result column="id" property="id"></result>
+        <result column="ordertime" property="ordertime"></result>
+        <result column="total" property="total"></result>
+        <result column="uid" property="id"></result>
+        <association property="user" javaType="MybatisUser">
+            <result column="uid" property="id"></result>
+            <result column="username" property="username"></result>
+            <result column="password" property="password"></result>
+            <result column="birthday" property="birthday"></result>
+        </association>
+    </resultMap>
+	
+	<!--select id="findOrderAndUser" 和 id="findOrderAndUser2" resultMap不同-->
+    <select id="findOrderAndUser2" resultMap="orderMap2">
+        select
+             o.id,
+             o.ordertime,
+             o.total,
+             o.uid,
+             u.username,
+             u.password,
+             u.birthday
+        from
+            orders o, user u
+        where
+            o.uid = u.id
+    </select>
+
+    <select id="findOrderAndUser" resultMap="orderMap">
+        select
+             o.id,
+             o.ordertime,
+             o.total,
+             o.uid,
+             u.username,
+             u.password,
+             u.birthday
+        from
+            orders o, user u
+        where
+            o.uid = u.id
+    </select>
+~~~
+
+~~~java
+	// 测试代码    
+	@Test
+    public void testFindOrderAndUser2() {
+        List<Order> allOrders = orderMapper.findOrderAndUser2();
+        for (Order order : allOrders) {
+            System.out.println(order);
+        }
+    }
+
+    @Test
+    public void testFindOrderAndUser() {
+        List<Order> allOrders = orderMapper.findOrderAndUser();
+        for (Order order : allOrders) {
+            System.out.println(order);
+        }
+    }
+~~~
+
+### 6.4 一对多查询
+
+一对多查询模型：用户表和订单表的关系为，一个用户有多个订单，一个订单只从属一个用户
+
+一对多查询需求：查询用户，于此同时查询用户所有的订单
+
+~~~java
+	//mapper接口    
+	//一对多查询，一个用户对应多个订单。
+	//需求：查询用户，于此同时查询用户所有的订单
+    List<MybatisUser> findAllUserAndOrders();
+~~~
+
+~~~xml
+	<!--sql语句配置文件，xxxMapper.xml-->
+	<resultMap id="userMap" type="MybatisUser">
+        <result column="id" property="id"></result>
+        <result column="username" property="username"></result>
+        <result column="password" property="password"></result>
+        <result column="birthday" property="birthday"></result>
+        <collection property="orderList" ofType="order">
+            <result column="oid" property="id"></result>
+            <result column="ordertime" property="ordertime"></result>
+            <result column="total" property="total"></result>
+        </collection>
+    </resultMap>    
+
+	<select id="findAllUserAndOrders" resultMap="userMap">
+        select
+            u.id,
+            u.username,
+            u.password,
+            u.birthday,
+            o.id oid,
+            o.ordertime,
+            o.total
+        from
+            user u
+            left join orders o on u.id = o.uid;
+    </select>
+~~~
+
+~~~java
+    // 测试代码
+	@Test
+    public void testFindAllUserAndOrders() {
+        List<MybatisUser> allUsers = orderMapper.findAllUserAndOrders();
+        for (MybatisUser allUser : allUsers) {
+            System.out.println(allUser);
+        }
+    }
+~~~
+
+
+
+### 6.5 多对多查询
+
+多对多查询模型：用户表和角色表的关系为，一个用户有多个角色，一个角色有多个用户
+
+多对多查询需求：查询用户，同时查询用户所有的角色。
+
+~~~java
+	//mapper接口
+    //多对多查询，一个用户对应多个角色，一个角色对应多个用户，需求查询用户的同时查询出该用户的所有角色
+    List<MybatisUser> findAlluserAndRole();
+~~~
+
+~~~xml
+    <!--sql语句配置文件，xxxMapper.xml-->
+    <resultMap id="userRole" type="MybatisUser">
+        <result column="id" property="id"></result>
+        <result column="username" property="username"></result>
+        <result column="password" property="password"></result>
+        <result column="birthday" property="birthday"></result>
+        <collection property="roleList" ofType="com.daonian.practice.mybatis.pojo.Role">
+            <result column="rid" property="id"></result>
+            <result column="rolename" property="rolename"></result>
+            <result column="roleDesc" property="roleDesc"></result>
+        </collection>
+    </resultMap>
+    <select id="findAlluserAndRole" resultMap="userRole">
+        SELECT
+            u.id,
+            u.username,
+            u.PASSWORD,
+            u.birthday,
+            r.id rid,
+            r.rolename,
+            r.roleDesc
+        FROM
+            USER u
+            LEFT JOIN sys_user_role ur ON u.id = ur.userid
+            INNER JOIN sys_role r ON ur.roleid = r.id
+    </select>
+~~~
+
+~~~java
+    // 测试代码
+	@Test
+    public void testFindAlluserAndRole() {
+        List<MybatisUser> allUsers = orderMapper.findAlluserAndRole();
+        for (MybatisUser allUser : allUsers) {
+            System.out.println(allUser);
+        }
+    }
+~~~
+
+
+
+
+
+## 第七部分 Mybatis的注解开发
+
+###  7.1 Mybatis常用注解
+
+ MyBatis也可以用注解的方式开发，这样就可以不用写Mapper映射文件了。
+
+**常用的注解**
+
+| 注解     | 描述                                  |
+| -------- | ------------------------------------- |
+| @Insert  | 向数据库插入记录                      |
+| @Update  | 更新数据库中的记录                    |
+| @Delete  | 删除数据库中的记录                    |
+| @Select  | 向数据库查询记录                      |
+| @Result  | 实现结果集的封装                      |
+| @Results | 可以与@Result一起使用，封装多个结果集 |
+| @One     | 实现一对一结果集的封装                |
+| @Many    | 实现一对多结果集的封装                |
+
+### 7.2 Mybatis增删改查
+
+ 简单的增删改查
+
+~~~java
+    // mapper接口
+	@Select("select id,username,password,birthday from user")
+    List<MybatisUser> findAllUseAnnotation();
+
+    @Delete("delete from user where id = #{id}")
+    int deleteUserByIdUseAnnotaion(int id);
+
+    @Update("update user set password=#{password} where id = #{id} ")
+    int updateUserByIdUseAnnotation(MybatisUser mybatisUser);
+
+    @Insert("insert into user (id,username,password,birthday) values (#{id},#{username},#{password},#{birthday})")
+    int insertUserUseAnnotation(MybatisUser user);
+~~~
+
+~~~java
+// 测试代码
+    @Test
+    public void testFindAllUseAnnotation(){
+        List<MybatisUser> allUser = userMapper.findAllUseAnnotation();
+        for (MybatisUser mybatisUser : allUser) {
+            System.out.println(mybatisUser);
+        }
+    }
+
+    @Test
+    public void testDeleteUserByIdUseAnnotaion(){
+        int deleteCount = userMapper.deleteUserByIdUseAnnotaion(3);
+        sqlSession.commit();
+        System.out.println(deleteCount);
+    }
+
+    @Test
+    public void testUpdateUserByIdUseAnnotation(){
+        MybatisUser mybatisUser = new MybatisUser();
+        mybatisUser.setId(3);
+        mybatisUser.setPassword("321");
+        int updateCount = userMapper.updateUserByIdUseAnnotation(mybatisUser);
+        sqlSession.commit();
+        System.out.println(updateCount);
+    }
+
+    @Test
+    public void testInsertUseAnnotation(){
+        MybatisUser mybatisUser = new MybatisUser();
+        mybatisUser.setId(3);
+        mybatisUser.setUsername("lisi");
+        mybatisUser.setPassword("123");
+        mybatisUser.setBirthday(new Date());
+        int insertCount = userMapper.insertUserUseAnnotation(mybatisUser);
+        System.out.println(insertCount);
+        sqlSession.commit();
+    }
+~~~
+
+### 7.3 Mybatis注解实现复杂映射开发
+
+参考资料：[@Results用法总结](https://blog.csdn.net/cherlshall/article/details/80950150)
+
+#### 7.3.1 基于注解的一对一查询
+
+IOrderMapper.java
+
+~~~java
+    // 使用注解 一对一查询，需求：查询订单，于此同时查询订单所属的用户
+    @Select("select id,ordertime,total,uid from orders")
+    @Results({
+            @Result(column = "id",property = "id"),
+            @Result(column = "ordertime",property = "ordertime"),
+            @Result(column = "total",property = "total"),
+            @Result(column = "uid",property = "uid"),
+            @Result(column = "uid",property = "user",
+                    javaType = MybatisUser.class,
+                    one = @One(select = "com.daonian.practice.mybatis.mapper.IUserMapper.findById"))
+
+    })
+    List<Order> findOrderAndUserUseAnnotation();
+~~~
+
+IUserMapper.java
+
+~~~java
+    @Select("select id,username,password,birthday from user where id = #{id}")
+    MybatisUser findById(int id);
+~~~
+
+测试代码
+
+~~~java
+    // 使用注解 一对一查询，需求：查询订单，于此同时查询订单所属的用户
+    @Test
+    public void testFindOrderAndUserUseAnnotation(){
+        List<Order>  orderList = orderMapper.findOrderAndUserUseAnnotation();
+        for (Order order : orderList) {
+            System.out.println(order);
+        }
+    }
+~~~
+
+
+
+#### 7.3.2 基于注解的一对多查询
+
+##### 7.3.2.1 传递单个参数
+
+IUserMapper.java
+
+~~~java
+    // 使用注解 一对多查询，需求：查询用户，于此同时查询用户的所有订单
+    @Select("select id,username,password,birthday from user")
+    @Results({
+            @Result(column = "id",property = "id"),
+            @Result(column = "username",property = "username"),
+            @Result(column = "password",property = "password"),
+            @Result(column = "birthday",property = "birthday"),
+            @Result(column = "id",property = "orderList",javaType = List.class,
+                    many=@Many(select="com.daonian.practice.mybatis.mapper.IOrderMapper.findOrderById"))
+    })
+    List<MybatisUser> findUserAndOrdersUseAnnotation();
+~~~
+
+IOrderMapper.java
+
+~~~java
+    // 根据id查询订单
+    @Select("select id,ordertime,total,uid from orders where id = #{id} and total = #{total}" )
+    List<Order> findOrderByIdAndTotal(@Param("id") int id,@Param("total") double total);
+~~~
+
+测试代码
+
+~~~java
+    // 使用注解 一对多查询，需求：查询用户，于此同时查询用户的所有订单
+    @Test
+    public void testFindUserAndOrdersUseAnnotation(){
+        List<MybatisUser> mybatisUsers = userMapper.findUserAndOrdersUseAnnotation();
+        for (MybatisUser mybatisUser : mybatisUsers) {
+            System.out.println(mybatisUser);
+        }
+    }
+
+~~~
+
+##### 7.3.2.2 传递多个参数
+
+IUserMapper.java
+
+~~~java
+    //使用注解，一对多查询，传递多个参数。需求：查询用户，于此同时查询用户的所有角色。
+    // 下面"id=id,total=id"是传递多个值给查询订单的接口，等号左边表示订单接口的@Param里的值，
+    // 右边表示数据库里的值（select id,username,password,birthday from user），由于数据库中没有total字段
+    // 使用id代替。如果有total的值，应该是"id=id,total=total"
+    //订单接口List<Order> findOrderByIdAndTotal(@Param("id") int id,@Param("total") double total);
+    @Select("select id,username,password,birthday from user")
+    @Results({
+            @Result(column = "id",property = "id"),
+            @Result(column = "username",property = "username"),
+            @Result(column = "password",property = "password"),
+            @Result(column = "birthday",property = "birthday"),
+            @Result(column = "id=id,total=id",property = "orderList",javaType = List.class,
+                   many=@Many(select = "com.daonian.practice.mybatis.mapper.IOrderMapper.findOrderByIdAndTotal"))
+    })
+    List<MybatisUser> findUserAndOrdersUseAnnotationTTwoParam();
+~~~
+
+IOrderMapper.java
+
+~~~java
+    // 根据id查询订单
+    @Select("select id,ordertime,total,uid from orders where id = #{id} and total = #{total}" )
+    List<Order> findOrderByIdAndTotal(@Param("id") int id,@Param("total") double total);
+~~~
+
+测试代码
+
+~~~java
+    //使用注解，一对多查询，传递多个参数。需求：查询用户，于此同时查询用户的所有角色。
+    @Test
+    public void testFindUserAndOrdersUseAnnotationTTwoParam(){
+        List<MybatisUser> mybatisUsers = userMapper.findUserAndOrdersUseAnnotationTTwoParam();
+        for (MybatisUser mybatisUser : mybatisUsers) {
+            System.out.println(mybatisUser);
+        }
+    }
+~~~
+
+
+
+#### 7.3.3 基于注解的多对多查询
+
+IUserMapper.java
+
+~~~java
+    // 使用注解，多对多查询，需求：查询用户，于此同时查询用户的所有角色
+    @Select("select id,username,password,birthday from user")
+    @Results({
+            @Result(column = "id", property = "id"),
+            @Result(column = "username", property = "username"),
+            @Result(column = "password", property = "password"),
+            @Result(column = "birthday", property = "birthday"),
+            @Result(column = "id",property = "roleList",javaType = List.class,
+                    many=@Many(select="com.daonian.practice.mybatis.mapper.IRoleMapper.findRoleByUserIdUseAnnotaion"))
+    })
+    List<MybatisUser> findUserAndRoleUseAnnotaion();
+~~~
+
+IRoleMapper.java
+
+~~~java
+    // 根据用户id，查询用户所有角色
+    @Select("select r.id,r.rolename,r.roleDesc from sys_user_role ur inner join sys_role r on ur.roleid = r.id where ur.userid = #{userid}")
+    List<Role> findRoleByUserIdUseAnnotaion(int userid);
+~~~
+
+测试代码
+
+~~~java
+    // 使用注解，多对多查询，需求：查询用户，于此同时查询用户的所有角色
+    @Test
+    public void testFindUserAndRoleUseAnnotaion(){
+        List<MybatisUser> mybatisUsers = userMapper.findUserAndRoleUseAnnotaion();
+        for (MybatisUser mybatisUser : mybatisUsers) {
+            System.out.println(mybatisUser);
+        }
+    }
+~~~
+
+## 第八部分 Mybatis缓存
+
+### 8.1 Mybatis缓存是什么
+
+​		mybatis缓存就是将从数据库查询返回的数据存放到内存中，一般的ORM 框架都会提供的功能，避免频繁与数据库交互，目的就是提升查询的效率、减少数据库的压力和提高响应速度。跟Hibernate 一样，MyBatis 也有一级缓存和二级缓存，并且预留了集成第三方缓存的接口。**mybatis缓存体系**：
+
+![image-20200607142500225](..\img-folder\image-20200607142500225.png)
+
+​		MyBatis 跟缓存相关的类都在cache 包里面，其中有一个Cache 接口，只有一个默认的实现类 PerpetualCache，它是用HashMap 实现的。我们可以通过以下类找到PerpetualCache缓存。
+
+**DefaultSqlSession**
+
+​					-> **BaseExecutor**
+
+​									-> **PerpetualCache** localCache
+
+​														->	**private Map<Object, Object> cache = new HashMap();**																	
+
+![image-20200607142856540](..\img-folder\image-20200607142856540.png)
+
+![image-20200607142923203](..\img-folder\image-20200607142923203.png)
+
+![image-20200607143031263](..\img-folder\image-20200607143031263.png)
+
+​		除此之外，在decorators包中还有很多的装饰器类，通过这些装饰器类可以额外实现很多的功能：回收策略、日志记录、定时刷新等等。但是无论怎么装饰，经过多少层装饰，最后使用的还是基本的实现类（默认PerpetualCache）。
+
+![img](..\img-folder\1383365-20190628165835198-1731504252.png)
+
+​		所有的缓存实现类总体上可分为三类：基本缓存、淘汰算法缓存、装饰器缓存。![img](..\img-folder\1383365-20190628172253737-1751427739.png)
+
+### 8.2一级缓存
+
+#### 8.2.1 一级缓存是什么
+
+​		　一级缓存也叫本地缓存，MyBatis 的**一级缓存是在会话（SqlSession）层面进行缓存的**。MyBatis 的**一级缓存是默认开启**的，不需要任何的配置。首先我们必须去弄清楚一个问题，在MyBatis 执行的流程里面，涉及到这么多的对象，那么缓存PerpetualCache 应该放在哪个对象里面去维护？如果要在同一个会话里面共享一级缓存，这个对象肯定是在SqlSession 里面创建的，作为SqlSession 的一个属性。
+
+　　DefaultSqlSession 里面只有两个属性，Configuration 是全局的，所以缓存只可能放在Executor 里面维护——SimpleExecutor/ReuseExecutor/BatchExecutor 的父类BaseExecutor 的构造函数中持有了PerpetualCache。**在同一个会话里面，多次执行相同的SQL 语句，会直接从内存取到缓存的结果，不会再发送SQL 到数据库。但是不同的会话里面，即使执行的SQL 一模一样（通过一个Mapper 的同一个方法的相同参数调用），也不能使用到一级缓存**。
+
+　　每当我们使用MyBatis开启一次和数据库的会话，MyBatis会创建出一个SqlSession对象表示一次数据库会话。在对数据库的一次会话中，我们有可能会反复地执行完全相同的查询语句，如果不采取一些措施的话，每一次查询都会查询一次数据库,而我们在极短的时间内做了完全相同的查询，那么它们的结果极有可能完全相同，由于查询一次数据库的代价很大，这有可能造成很大的资源浪费。
+
+　　为了解决这一问题，减少资源的浪费，MyBatis会在表示会话的SqlSession对象中建立一个简单的缓存，将每次查询到的结果结果缓存起来，当下次查询的时候，如果判断先前有个完全一样的查询，会直接从缓存中直接将结果取出，返回给用户，不需要再进行一次数据库查询了。
+
+　　如下图所示，MyBatis会在一次会话的表示----一个SqlSession对象中创建一个本地缓存(local cache)，对于每一次查询，都会尝试根据查询的条件去本地缓存中查找是否在缓存中，如果在缓存中，就直接从缓存中取出，然后返回给用户；否则，从数据库读取数据，将查询结果存入缓存并返回给用户。
+
+![image-20200607144244158](..\img-folder\image-20200607144244158.png)
+
+#### 8.2.2 一级缓存的生命周期
+
+一级缓存的生命周期有多长？
+
+* MyBatis在开启一个数据库会话时，会创建一个新的SqlSession对象，SqlSession对象中会有一个新的Executor对象，Executor对象中持有一个新的PerpetualCache对象；当会话结束时，SqlSession对象及其内部的Executor对象还有PerpetualCache对象也一并释放掉。
+
+* 如果SqlSession调用了close()方法，会释放掉一级缓存PerpetualCache对象，一级缓存将不可用；
+
+* 如果SqlSession调用了clearCache()，会清空PerpetualCache对象中的数据，但是该对象仍可使用；
+
+* SqlSession中执行了任何一个update操作(update()、delete()、insert()) ，都会清空PerpetualCache对象的数据，但是该对象可以继续使用；
+
+SqlSession 一级缓存的工作流程：
+
+​	1）对于某个查询，根据statementId,params,rowBounds来构建一个key值，根据这个key值去缓存Cache中取出对应的key值存储的缓存结果
+
+​	2）判断从Cache中根据特定的key值取的数据数据是否为空，即是否命中；
+
+​		①如果命中，则直接将缓存结果返回；
+
+​		②如果没命中：
+
+​			Ⅰ. 去数据库中查询数据，得到查询结果；
+
+​			Ⅱ. 将key和查询到的结果分别作为key,value对存储到Cache中；
+
+​			Ⅲ. 将查询结果返回；
+
+　　**接下来我们来验证一下**，MyBatis 的一级缓存到底是不是只能在一个会话里面共享，以及跨会话（不同session）相同的操作会产生什么问题，判断是否命中缓存方法是，第二次查询如果发送SQL 到数据库执行，说明没有命中缓存；如果直接打印对象，说明是从内存缓存中取到了结果。
+
+~~~xml
+    <!--sql语句配置文件-->
+	<!--find all-->
+    <select id="findAll" resultType="MybatisUser">
+        select id,username,password from user
+    </select>
+~~~
+
+```java
+	// 查询所有
+	List<MybatisUser> findAll();
+```
+
+```java
+    // 测试代码，同一个sqlSession对象，发送两次请求。不同sqlSession会话对象，相同请求。
+    @Test
+    public void testFirstLevelCache() {
+        List<MybatisUser> first = userMapper.findAll();
+        for (MybatisUser user : first) {
+            System.out.println("打印第一次返回结果：" + user);
+        }
+
+        // 第二次查询，同一个sqlSession对象执行与第一次相同的查询，观察是否走缓存
+        List<MybatisUser> second = userMapper.findAll();
+        for (MybatisUser user : second) {
+            System.out.println("打印第二次查询结果：" + user);
+        }
+
+        // 新创建一个sqlSession会话对象查询，发送相同的请求
+        SqlSession newSqlSession = sqlSessionFactory.openSession();
+        IUserMapper mapper = newSqlSession.getMapper(IUserMapper.class);
+        List<MybatisUser> all = mapper.findAll();
+        for (MybatisUser mybatisUser : all) {
+            System.out.println("不同sqlSession会话对象打印结果：" + mybatisUser);
+        }
+
+        sqlSession.close();
+        newSqlSession.close();
+
+    }
+```
+
+测试结果
+
+![image-20200607150925023](..\img-folder\image-20200607150925023.png)![image-20200607152745487](..\img-folder\image-20200607152745487.png)
+
+
+
+从测试结果可以看出：
+
+​		① 同一个sqlSession对象，第二次查询，直接将结果打印出来，没有发送sql到数据库执行返回结果，说明第二次查询直接到缓存中取数据了，使用了一级缓存。
+
+​		② 新的会话对象newsqlSession，执行与sqlSession会话对象相同的查询，发送了sql到数据库查询结果返回打印，没有走缓存。说明不同的SqlSession会话对象一级换不是共享的。
+
+​		③ newSqlSession会话对象更新数据后，sqlSession会话对象第三次查询时，获取的数据仍是第一次查询结果的缓存数据，并不是最新的数据。说明一级缓存有脏数据的问题，其他会话更新了数据，导致读取到脏数据。
+
+#### 8.2.3 一级缓存的不足
+
+　　使用一级缓存的时候，因为缓存不能跨会话共享，不同的会话之间对于相同的查询可能有不一样的缓存。在有多个会话或者分布式环境下，会存在脏数据的问题。MyBatis 一级缓存（MyBaits 称其为 Local Cache）默认开启，无法关闭，但是有两种级别可选：
+
+​	① session 级别的缓存，在同一个 sqlSession 内，对同样的查询将不再查询数据库，直接从缓存中。
+
+​	② statement 级别的缓存，避坑： 为了避免这个问题，可以将一级缓存的级别设为 statement 级别的，这样每次查询结束都会清掉一级缓存。
+
+### 8.3 二级缓存
+
+#### 8.3.1 二级缓存是什么
+
+​		二级缓存是用来解决一级缓存不能**跨会话共享**的问题的，范围是namespace 级别的，**可以被多个SqlSession 共享**（只要是**同一个接口里面的相同方法**，都可以共享），**生命周期和应用同步**。如果你的MyBatis使用了二级缓存，并且你的Mapper和select语句也配置使用了二级缓存，那么在执行select查询的时候，MyBatis会先从二级缓存中取输入，其次才是一级缓存，即MyBatis查询数据的顺序是：二级缓存  —> 一级缓存 —> 数据库。
+
+　　作为一个作用范围更广的缓存，它肯定是在SqlSession 的外层，否则不可能被多个SqlSession 共享。而一级缓存是在SqlSession 内部的，所以第一个问题，肯定是工作在一级缓存之前，也就是只有取不到二级缓存的情况下才到一个会话中去取一级缓存。第二个问题，二级缓存放在哪个对象中维护呢？ 要跨会话共享的话，SqlSession 本身和它里面的BaseExecutor 已经满足不了需求了，那我们应该在BaseExecutor 之外创建一个对象。
+
+　　实际上MyBatis 用了一个装饰器的类来维护，就是CachingExecutor。如果启用了二级缓存，MyBatis 在创建Executor 对象的时候会对Executor 进行装饰。CachingExecutor 对于查询请求，会判断二级缓存是否有缓存结果，如果有就直接返回，如果没有委派交给真正的查询器Executor 实现类，比如SimpleExecutor 来执行查询，再走到一级缓存的流程。最后会把结果缓存起来，并且返回给用户。
+
+![image-20200607154010228](..\img-folder\image-20200607154010228.png)
+
+#### 8.3.2 开启二级缓存
+
+和一级缓存默认开启不一样，二级缓存需要手动开启。
+
+**首先**，在全局配置文件sqlMapConfig.xml文件中增加如下代码：
+
+~~~xml
+<!--开启二级缓存-->
+<settings>
+	<setting name="cacheEnabled" value="true"/>
+</settings>
+~~~
+
+**其次**，在sql语句配置文件xxxMapper.xml中开启二级缓存
+
+~~~
+<!--开启二级缓存-->
+<cache></cache>
+~~~
+
+xxxMapper.xml文件中的<cache>标签可以进行配置，PerpetualCache这个类是mybatis默认的实现缓存功能的类，不写type属性，就使用默认的缓存。可以定义实现cache接口的类作为缓存。
+
+![image-20200607154947406](..\img-folder\image-20200607154947406.png)
+
+![image-20200607155231691](..\img-folder\image-20200607155231691.png)
+
+可以看到，二级缓存底层还是HashMap结构。
+
+开启二级缓存后，还需要将缓存的pojo类实现Serializable接口，因为二级缓存数据存储介质多种多样，不一定只存在内中，有可能存在硬盘中，如果从硬盘中取话的就需要反序列化。
+
+
+
+**具体的一个二级缓存配置**
+
+~~~xml
+<!--具体的一个配置-->
+<cache type="org.apache.ibatis.cache.impl.PerpetualCache"
+    size="1024"
+eviction="LRU"
+flushInterval="120000"
+readOnly="false"/>
+~~~
+
+这个简单语句的效果如下:
+
+- 映射语句文件中的所有 select 语句的结果将会被缓存。
+- 映射语句文件中的所有 insert、update 和 delete 语句会刷新缓存。
+- 缓存会使用最近最少使用算法（LRU, Least Recently Used）算法来清除不需要的缓存。
+- 缓存不会定时进行刷新（也就是说，没有刷新间隔）。
+- 缓存会保存列表或对象（无论查询方法返回哪种）的 1024 个引用。
+- 缓存会被视为读/写缓存，这意味着获取到的对象并不是共享的，可以安全地被调用者修改，而不干扰其他调用者或线程所做的潜在修改。
+
+这个更高级的配置创建了一个 FIFO 缓存，每隔 60 秒刷新，最多可以存储结果对象或列表的 512 个引用，而且返回的对象被认为是只读的，因此对它们进行修改可能会在不同线程中的调用者产生冲突。可用的清除策略有：
+
+- `LRU` – 最近最少使用：移除最长时间不被使用的对象。
+- `FIFO` – 先进先出：按对象进入缓存的顺序来移除它们。
+- `SOFT` – 软引用：基于垃圾回收器状态和软引用规则移除对象。
+- `WEAK` – 弱引用：更积极地基于垃圾收集器状态和弱引用规则移除对象。
+
+默认的清除策略是 LRU。
+
+flushInterval（刷新间隔）属性可以被设置为任意的正整数，设置的值应该是一个以毫秒为单位的合理时间量。 默认情况是不设置，也就是没有刷新间隔，缓存仅仅会在调用语句时刷新。
+
+size（引用数目）属性可以被设置为任意正整数，要注意欲缓存对象的大小和运行环境中可用的内存资源。默认值是 1024。
+
+readOnly（只读）属性可以被设置为 true 或 false。只读的缓存会给所有调用者返回缓存对象的相同实例。 因此这些对象不能被修改。这就提供了可观的性能提升。而可读写的缓存会（通过序列化）返回缓存对象的拷贝。 速度上会慢一些，但是更安全，因此默认值是 false。
+
+　　注：**二级缓存是事务性的**。这意味着，当 SqlSession 完成并提交时，或是完成并回滚，但没有执行 flushCache=true 的 insert/delete/update 语句时，缓存会获得更新。
+
+　　Mapper.xml 配置了<cache>之后，select()会被缓存。update()、delete()、insert()会刷新缓存。：如果cacheEnabled=true，Mapper.xml 没有配置标签，还有二级缓存吗？（没有），还会出现CachingExecutor 包装对象吗？（会）
+
+　　只要cacheEnabled=true 基本执行器就会被装饰。有没有配置<cache>，决定了在启动的时候会不会创建这个mapper 的Cache 对象，只是最终会影响到CachingExecutorquery 方法里面的判断。**如果某些查询方法对数据的实时性要求很高**，不需要二级缓存，怎么办？我们**可以在单个Statement ID 上显式关闭二级缓存**（默认是true）：
+
+~~~xml
+<select id="findAll" resultMap="MybatisUser" useCache="false">
+~~~
+
+
+
+**useCache和flushCache**  
+
+mybatis中还可以配置userCache和flushCache等配置项，userCache是用来设置是否禁用二级缓存的，在statement中设置**useCache=false**可以禁用当前select语句的二级缓存，即每次查询都会发出sq|去数据库查询，默认情况是true,即该sq|使用二级缓存
+
+~~~xml
+<select id= "selectUserByUserId" useCache= "false"
+        resultType= "MybatisUser" parameterType="int">
+    select * from user where id = #{id}
+~~~
+
+这种情况是针对每次查询都需要最新的数据sql,要设置成useCache=false,禁用二级缓存，直接从数据库中获取。
+
+在mapper的同一个namespace中， 如果有其它insert、 update、 delete操作 数据后需要刷新缓存，如果不执行刷新缓存会出现脏读。
+
+设置statement配置中的**flushCache="true"**属性，默认情况下为true,即刷新缓存，如果改成false则不会刷新。使用缓存时如果手动修改数据库表中的查询数据会出现脏读。
+
+**二级缓存验证（验证二级缓存需要先开启二级缓存）**
+
+~~~xml
+    <!--开启二级缓存-->
+    <settings>
+        <setting name="cacheEnabled" value="true"/>
+    </settings>
+~~~
+
+**① 验证跨SqlSession会话对象时，可以使用二级缓存**
+
+~~~java
+    List<MybatisUser> findAllTestTwoLevelCache();
+~~~
+
+~~~xml
+    <!--开启二级缓存-->
+    <cache></cache>
+
+    <!--验证二级缓存-->
+    <select id="findAllTestTwoLevelCache" resultType="MybatisUser">
+        select id,username,password from user
+    </select>
+~~~
+
+~~~java
+    // 测试使用二级缓存的代码
+    @Test
+    public void testTowLevelCashe(){
+        SqlSession newSqlSession = sqlSessionFactory.openSession();
+        IUserMapper userMapper1 = newSqlSession.getMapper(IUserMapper.class);
+
+        List<MybatisUser> first = userMapper.findAllTestTwoLevelCache();
+        for (MybatisUser user : first) {
+            System.out.println("打印sqlSession查询结果：" + user);
+        }
+        // 注意事务不提交的情况下，并没有将数据写入到二级缓存中，二级缓存时不存在的
+        sqlSession.commit();
+
+        List<MybatisUser> second = userMapper1.findAllTestTwoLevelCache();
+        for (MybatisUser user : second) {
+            System.out.println("打印newSqlSession查询结果：" + user);
+        }
+
+        // 关闭第一个sqlSession会话对象
+        sqlSession.close();
+        newSqlSession.close();
+
+    }
+~~~
+
+测试结果
+
+![image-20200607163336108](..\img-folder\image-20200607163336108.png)
+
+从测试结果可以看出，第二次查询没有发送sql到数据执行取数据，直接打印出来，说明使用到了二级缓存。
+
+
+
+**② 事务不提交二级缓存不存在**
+
+​		二级缓存是事务性的。这意味着，当 SqlSession 完成并提交时，或是完成并回滚，但没有执行 flushCache=true 的 insert/delete/update 语句时，缓存会获得更新。否则数据不能会写入到二级缓存。
+
+~~~java
+    List<MybatisUser> findAllTestTwoLevelCache();
+~~~
+
+~~~xml
+    <!--开启二级缓存-->
+    <cache></cache>
+
+    <!--验证二级缓存-->
+    <select id="findAllTestTwoLevelCache" resultType="MybatisUser">
+        select id,username,password from user
+    </select>
+~~~
+
+~~~java
+    // 测试使用二级缓存的代码
+    @Test
+    public void testTowLevelCashe(){
+        SqlSession newSqlSession = sqlSessionFactory.openSession();
+        IUserMapper userMapper1 = newSqlSession.getMapper(IUserMapper.class);
+
+        List<MybatisUser> first = userMapper.findAllTestTwoLevelCache();
+        for (MybatisUser user : first) {
+            System.out.println("打印sqlSession查询结果：" + user);
+        }
+        // 注意事务不提交的情况下，并没有将数据写入到二级缓存中，二级缓存时不存在的
+        //sqlSession.commit();
+
+        List<MybatisUser> second = userMapper1.findAllTestTwoLevelCache();
+        for (MybatisUser user : second) {
+            System.out.println("打印newSqlSession查询结果：" + user);
+        }
+
+        // 关闭SqlSession会话对象
+        sqlSession.close();
+        newSqlSession.close();
+    }
+~~~
+
+测试结果
+
+![image-20200607164432801](..\img-folder\image-20200607164432801.png)
+
+​		从测试结果可以看出，如果不提交的话，数据没有写入二级缓存中，其他的SqlSession对象相同的查询并没有从缓存中查询到数据。
+
+​		为什么事务不提交，二级缓存不生效？因为二级缓存使用TransactionalCacheManager（TCM）来管理，最后又调用了TransactionalCache 的getObject()、putObject 和commit()方法，TransactionalCache里面又持有了真正的Cache 对象，比如是经过层层装饰的PerpetualCache。在putObject 的时候，只是添加到了entriesToAddOnCommit 里面，只有它的commit()方法被调用的时候才会调用flushPendingEntries()真正写入缓存。它就是在DefaultSqlSession 调用commit()的时候被调用的。
+
+③ 验证在其他的SqlSession会话对象中执行增删改操作，缓存会被刷新
+
+```java
+List<MybatisUser> findAllTestTwoLevelCache();
+```
+
+```xml
+<!--验证二级缓存-->
+<select id="findAllTestTwoLevelCache" resultType="MybatisUser">
+    select id,username,password from user
+</select>
+```
+
+```java
+@Test
+public void testTowLevelCashe(){
+    SqlSession newSqlSession = sqlSessionFactory.openSession();
+    IUserMapper userMapper1 = newSqlSession.getMapper(IUserMapper.class);
+
+    List<MybatisUser> first = userMapper.findAllTestTwoLevelCache();
+    for (MybatisUser user : first) {
+        System.out.println("打印sqlSession查询结果：" + user);
+    }
+    // 注意事务不提交的情况下，并没有将数据写入到二级缓存中，二级缓存时不存在的
+    sqlSession.commit();
+
+    // 验证在sqlSession会话对象，执行update、insert、delete操作会清空缓存
+    MybatisUser mybatisUser = new MybatisUser();
+    mybatisUser.setId(3);
+    mybatisUser.setUsername("list");
+    mybatisUser.setPassword("123");
+    mybatisUser.setBirthday(new Date());
+    userMapper.insertMybatisUser(mybatisUser);
+    sqlSession.commit();
+
+    // 由于缓存被清空，会发送sql到数据库去查询数据
+    List<MybatisUser> second = userMapper1.findAllTestTwoLevelCache();
+    for (MybatisUser user : second) {
+        System.out.println("打印newSqlSession查询结果：" + user);
+    }
+    
+    // 关闭第一个sqlSession会话对象
+    sqlSession.close();
+    newSqlSession.close();
+}
+```
+
+测试结果
+
+![image-20200607170804975](..\img-folder\image-20200607170804975.png)
+
+​		从测试结果可以看出，当执行insert操作后，二级级换被清空了，后面的查询，需要到数据库查询数据。
+
+​		为什么增删改操作会清空缓存？在CachingExecutor 的update()方法里面会调用flushCacheIfRequired(ms)，isFlushCacheRequired 就是从标签里面渠道的flushCache 的值。而增删改操作的flushCache 属性默认为true。
+
+**什么时候开启二级缓存？**
+
+​		一级缓存默认是打开的，二级缓存需要配置才可以开启。那么我们必须思考一个问题，在什么情况下才有必要去开启二级缓存？因为所有的增删改都会刷新二级缓存，导致二级缓存失效，所以适合在查询为主的应用中使用，比如历史交易、历史订单的查询。否则缓存就失去了意义。
+
+#### 8.3.3 二级缓存的不足
+
+​		如果多个namespace 中有针对于同一个表的操作，比如user 表，如果在一个namespace 中刷新了缓存，另一个namespace 中没有刷新，就会出现读到脏数据的情况。所以，推荐在一个Mapper 里面只操作单表的情况使用。
+
+如何解决脏读的问题？
+
+① 在sql语句配置文件xxxMapper.xml中，对“可能会操作非该xxxMapper.xml所对应的表”的select语句，设置flushCache="true",即清空缓存，如果改为false则不会清空缓存。insert̵ update̵ delete  这些操作会自动的清空缓存，不用设置。
+
+② 让多个namespace共享一个二级缓存。可以使用cache-ref>来解决。
+
+```xml
+<cache-ref namespace="com.daonian.practice.mybatis.mapper.IUserMapper" />
+```
+
+cache-ref 代表引用别的命名空间的Cache 配置，两个命名空间的操作使用的是同一个Cache。在关联的表比较少，或者按照业务可以对表进行分组的时候可以使用。**注意：**在这种情况下，多个Mapper 的操作都会引起缓存刷新，缓存的意义已经不大了。
+
+### 8.4 二级缓存整合redis
+
+​		上面介绍的都是Mybatis自带的缓存，但是这个缓存是单服务器工作的，无法实现分布式缓存。那什么是分布式缓存呢，假设现在又两个服务器1、2，用户访问服务器1，查询后的缓存就会放到服务器1上，现在另一个用户访问的是服务器2，那么在服务器2上就获取不到服务1的缓存数据。
+
+![image-20200607175803831](..\img-folder\image-20200607175803831.png)
+
+​		为了解决这个问题就找一个分布式缓存，专门用来存储数据，这样不同的服务器要缓存的数据都往分布式缓存哪里存，取缓存数据也从分布式缓存中取。
+
+![image-20200607180032340](..\img-folder\image-20200607180032340.png)
+
+**mybatis与redis缓存的整合**
+
+​		mybatis提供一个Cache接口，如果使用自定义缓存，实现Cache接口即可。mybatis本身默认实现了一个，但是这个缓存的实现无法实现分布式缓存，所以我们要自己来实现。redis分布式缓存就可以，mybatis提供了-个针对cache接口的redis实现类，该类存在mybatis-redis包中
+
+实现：
+
+① pom.xml文件
+
+~~~xml
+<dependency>
+    <groupId>org.mybatis.caches</groupId>
+    <artifactId>mybatis-redis</artifactId>
+    <version>1.0.0-beta2</version>
+</dependency>  
+~~~
+
+② sql语句配置文件
+
+~~~xml
+<cache type="org.mybatis.caches.redis.RedisCache" />
+    
+<select id="findAll" resultType="MybatisUser" useCache="true">
+	select * from user
+</select>
+~~~
+
+③ redis.propertis
+
+~~~properties
+redis.host=localhost
+redis.port=6379
+redis.connectionTimeout=5000
+redis.password=
+redis.database=0
+~~~
+
+④ 测试
+
+~~~java
+@Test
+public void SecondLevelCache(){
+    SqlSession sqlSession1 = sqlSessionFactory.openSession();
+    SqlSession sqlSession2 = sqlSessionFactory.openSession();
+    SqlSession sqlSession3 = sqlSessionFactory.openSession();
+    
+    IUserMapper mapper1 = sqlSession1.getMapper(IUserMapper.class);
+    IUserMapper mapper2 = sqlSession2.getMapper(IUserMapper.class);
+    IUserMapper mapper3 = sqlSession3.getMapper(IUserMapper.class);
+    
+    MybatisUser user1 = mapper1.findUserById(1);
+    sqlSession1.close(); //清空一级缓存
+    
+    User user = new User();
+    user.setId(1);
+    user.setUsername("lisi");
+    mapper3.updateUser(user);
+    sqlSession3.commit();
+    
+    MybatisUser user2 = mapper2.findUserById(1);
+    System.out.println(user1==user2);
+}  
+~~~
+
+
+
+## 第九部分 Mybatis插件
+
+### 9.1 插件简介
+
+​		一般情况下，开源框架都会提供插件或其他形式扩展点，供开发者自行扩展。这样的好处是显而易见的，一是增加了框架的灵活性。二是开发者可以结合实际需要，对框架进行拓展，使其能够更好适合自己工作。以Mybatis为例，可以基于Mybatis插件机制实现分页、分表、监控等功能。
+
+​		Mybatis作为一个应用广泛的优秀ORM开源框架，这个框架具有强大的灵活性，在四大组件（Executor、StatementHandler、ParameterHandler、ResultSetHandler）处提供了简单易用的插件扩展机制。Mybatis对持久层的操作就是借助于四大核心对象。Mybatis支持用插件对四大核心对象进行拦截，对mybatis来说插件就是拦截器，用来增强核心对象的功能，增强功能本质上是借助于底层的动态代理实现的，换句话说，Mybatis中的四大对象都是代理对象。
+
+![image-20200607192956954](..\img-folder\image-20200607192956954.png)
+
+ Mybatis所允许的拦截的方法如下：
+
+* 执行器Executor（update、query、commit、rollback等方法）
+* SQL语法构建器StatementHandler（prepare、parameterize、batch、update、query）等方法
+* 参数处理器ParameterHandler（getParameterObject、setParameter方法）
+* 结果集处理器ResultSetHandler（handleResultSets、handleOutputParameters等方法）
+
+### 9.2 Mybatis插件原理
+
+在四大对象创建的时候
+
+* 每个创建出来的对象不是直接返回的，而是interceptorChain.pluginAll(parameterHandler);
+* 获取到所有的Interceptor (拦截器) (插件 需要实现的接口) ;调用
+  interceptor.plugin(target);返回target包装后的对象
+* 插件机制，我们可以使用插件为目标对象创建一个代理对象; AOP (面向切面)我们的插件可
+  以为四大对象创建出代理对象，代理对象就可以拦截到四大对象的每一一个执行 ;
+
+拦截
+
+插件具体是如何拦截并附加额外的功能的呢?以ParameterHandler 来说
+
+~~~java
+public ParameterHandler newParameterHandler(MappedStatement mappedStatement,
+    Object object, BoundSql sql, InterceptorChain interceptorChain){
+    ParameterHandler parameterHandler =
+    mappedStatement.getLang().createParameterHandler(mappedStatement,object,sql);
+    parameterHandler = (ParameterHandler)
+    interceptorChain.pluginAll(parameterHandler);
+    return parameterHandler;
+}
+public Object pluginAll(Object target) {
+    for (Interceptor interceptor : interceptors) {
+    	target = interceptor.plugin(target);
+    }
+	return target;
+}
+~~~
+
+interceptorChain保存了所有的拦截器(interceptors)，是mybatis初始化的时候创建的。调用拦截器链中的拦截器依次的对目标进行拦截或增强。interceptor.plugin(target)中的target就可以理解为mybatis中的四大对象。返回的target是被重重代理后的对象，如果我们想要拦截Executor的query方法，那么可以这样定义插件:
+
+~~~
+@Intercepts({
+	@Signature({
+		type = Executor.class,
+		method = "query",
+		args = {MappedStatement.class,Object.class,RowBounds.class,ResultHandler.class}
+	})
+})
+public class ExamplePlugin implements Interceptor{
+	//省略逻辑
+}
+~~~
+
+除此之外，我们还需要将插件配置到sqlMapConfig.xml中
+
+~~~xml
+<plugins>
+	<plugin interceptor="com.daonian.practice.mybatis.plugin.ExamplePlugin"></plugin>
+</plugins>
+~~~
+
+这样MyBatis在启动时可以加载插件，并保存插件实例到相关对象(InterceptorChain, 拦截器链)中。待准备工作做完后，MyBatis 处于就绪状态。我们在执行SQL时，需要先通过DefaultSqlSessionFactory创建SqlSession。Executor 实例会在创建SqlSession的过程中被创建，Executor实例创建完毕后，MyBatis 会通过jDK动态代理为实例生成代理类。这样，插件逻辑即可在Executor相关方法被调用前执行。以上就是MyBatis插件机制的基本原理。
 
 
 
 
 
 
-
-
-
-#### 
-
-#### 7、Mybatis输入参数类型和结果类型
 
 #### 8、Mybatis连接池和事务控制
 
-#### 9、Mybatis入门级CRUD操作
-
-#### 10、Mybatis动态SQL
-
-#### 11、Mybatis多表关联查询
-
-#### 12、Mybatis的注解开发
+#### 
 
 #### 13、Mybatis延迟加载策略
 
