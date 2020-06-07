@@ -2473,6 +2473,217 @@ public class ExamplePlugin implements Interceptor{
 
 这样MyBatis在启动时可以加载插件，并保存插件实例到相关对象(InterceptorChain, 拦截器链)中。待准备工作做完后，MyBatis 处于就绪状态。我们在执行SQL时，需要先通过DefaultSqlSessionFactory创建SqlSession。Executor 实例会在创建SqlSession的过程中被创建，Executor实例创建完毕后，MyBatis 会通过jDK动态代理为实例生成代理类。这样，插件逻辑即可在Executor相关方法被调用前执行。以上就是MyBatis插件机制的基本原理。
 
+### 9.3 Mybatis自定义插件
+
+#### 9.3.1 插件接口
+
+Mybatis插件接口-Interceptor
+
+* Intercept方法，插件的核心方法
+* plugin方法，生成target的代理对象
+* setProperties方法，传递插件所需参数
+
+#### 9.3.2 自定义插件
+
+设计实现一个自定义插件
+
+~~~java
+package com.daonian.practice.mybatis.plugin;
+
+import org.apache.ibatis.executor.statement.StatementHandler;
+import org.apache.ibatis.plugin.*;
+
+import java.sql.Connection;
+import java.util.Properties;
+
+
+@Intercepts({//注意看这个大括号，也就是说这里可以定义多个@Signature对多个地方拦截，
+        @Signature(type = StatementHandler.class,// 这是指拦截哪个接口
+                method = "prepare",// 这个接口内的哪个方法名
+                args = { Connection.class, Integer.class})//这是拦截方法的入参，按顺序写到这，不要多不要少，如果方法重载，可是要通过方法名和入参唯一确定
+        })
+public class MyPlugin implements Interceptor {
+
+    // 拦截方法，只要被拦截的目标对象的目标方法被执行时，每次都会执行interceptor方法
+    @Override
+    public Object intercept(Invocation invocation) throws Throwable {
+        // 增强逻辑
+        System.out.println("对方法进行了增强...");
+        return invocation.proceed(); // 执行原方法
+    }
+
+    /**
+     * 主要为了把当前的拦截器生成代理存到拦截器链中
+     * @Description 包装目标对象，为目标对象创建代理对象
+     * @param target 要拦截的对象
+     * @return
+     */
+    @Override
+    public Object plugin(Object target) {
+        System.out.println("将要包装的目标对象：" + target);
+        return Plugin.wrap(target,this);
+    }
+
+    // 获取配置文件的参数
+    // 插件初始化的时候调用，也就调用一次，插件配置的属性从这里设置进来
+    @Override
+    public void setProperties(Properties properties) {
+        System.out.println("插件配置的初始化参数：" + properties );
+    }
+
+}
+~~~
+
+~~~xml
+   <!--sqlMapConfig.xml插件-->
+	<plugins>
+        <plugin interceptor="com.daonian.practice.mybatis.plugin.MyPlugin">
+            <!--配置参数-->
+            <property name="name" value="Bob"/>
+        </plugin>
+    </plugins>
+~~~
+
+测试代码
+
+~~~java
+package com.daonian.practice.mybatis.plugin;
+
+import com.daonian.practice.mybatis.mapper.IUserMapper;
+import com.daonian.practice.mybatis.pojo.MybatisUser;
+import org.apache.ibatis.io.Resources;
+import org.apache.ibatis.session.SqlSession;
+import org.apache.ibatis.session.SqlSessionFactory;
+import org.apache.ibatis.session.SqlSessionFactoryBuilder;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.List;
+
+public class MyPluginTest {
+    @Test
+    public void testMyPlugin() throws IOException {
+        InputStream inputStream = Resources.getResourceAsStream("com/daonian/practice/mybatis/sqlMapConfig.xml");
+        SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(inputStream);
+        SqlSession sqlSession = sqlSessionFactory.openSession();
+        IUserMapper userMapper = sqlSession.getMapper(IUserMapper.class);
+        List<MybatisUser> mybatisUsers = userMapper.selectIdAndUser();
+        for (MybatisUser mybatisUser : mybatisUsers) {
+            System.out.println(mybatisUser);
+        }
+
+    }
+}
+
+~~~
+
+测试结果
+
+![image-20200607224914277](..\img-folder\image-20200607224914277.png)
+
+![image-20200607225008656](..\img-folder\image-20200607225008656.png)
+
+### 9.4 源码分析
+
+执行插件逻辑
+
+Plugin实现了Invocationhandler接口，因此它的invoke方法会拦截所有的方法调用。invoke方法会对所拦截的方法进行检测，以决定是否执行插件逻辑，该方法的逻辑如下：
+
+![image-20200607225555903](..\img-folder\image-20200607225555903.png)
+
+invoke方法的代码比较少，逻辑不难理解。首先，invoke方法会检测被拦截的方法是否配置在插件的@Signature注解中，若是，则执行插件逻辑，否则执行被拦截的方法。插件逻辑封装在interceptor中，该方法的参数类型为Invocation。Invocation主要用于存储目标类，方法以及方法参数列表。下面简单看一下该类的定义
+
+![image-20200607225948200](..\img-folder\image-20200607225948200.png)
+
+### 9.5 pageHelper分页插件
+
+Mybatis可以使用第三方的插件来对功能进行扩展，分页助手PageHelper是将分页的复杂操作进行封装，使用简单的方式即可获得分页的相关数据
+
+开发步骤:
+
+① 导入通用PageHelper坐标
+
+~~~xml
+<!--分页助手-->
+<dependency>
+    <groupId>com.github.pagehelper</groupId>
+    <artifactId>pagehelper</artifactId>
+    <version>3.7.5</version>
+</dependency>
+<dependency>
+    <groupId>com.github.jsqlparser</groupId>
+    <artifactId>jsqlparser</artifactId>
+    <version>0.9.1</version>
+</dependency>
+~~~
+
+
+
+② 在Mybatis核心配置文件中配置PageHelper插件
+
+~~~xml
+        <!--注意，分页助手插件，配置在通用mapper之前-->
+        <plugin interceptor="com.github.pagehelper.PageHelper">
+            <!--指定方言-->
+            <property name="dialect" value="mysql"/>
+        </plugin>
+~~~
+
+
+
+③ 测试分页数据获取
+
+~~~java
+   @Test
+    public void testPageHelper(){
+        // 设置分页参数
+        PageHelper.startPage(1,2);
+
+        List<MybatisUser> mybatisUsers = userMapper.findAll();
+        for (MybatisUser mybatisUser : mybatisUsers) {
+            System.out.println(mybatisUser);
+        }
+
+        // 获取其他分页相关的参数
+        PageInfo<MybatisUser> mybatisUserPageInfo = new PageInfo<>(mybatisUsers);
+        System.out.println("总条数: " + mybatisUserPageInfo.getTotal() );
+        System.out.println("总页数：" + mybatisUserPageInfo.getPages());
+        System.out.println("当前页：" + mybatisUserPageInfo.getPageNum());
+        System.out.println("每页显示长度：" + mybatisUserPageInfo.getPageSize());
+        System.out.println("是否是第一页：" + mybatisUserPageInfo.isIsFirstPage());
+        System.out.println("是否是最后一页：" + mybatisUserPageInfo.isIsLastPage());
+    }
+~~~
+
+
+
+### 9.6 通用mapper
+
+**什么是通用mapper**
+
+通用mapper就是为了解决单表增删改查的问题，基于Mybatis插件机制，开发人员不需要写SQL，不需要在mapper接口中增加方法，只要写好实体类，就能支持相应的增删改查方法。
+
+使用步骤：
+
+① 首先在maven项目中引入mapper的依赖
+
+~~~xml
+<dependency>
+    <groupId>tk.mybatis</groupId>
+    <artifactId>mapper</artifactId>
+    <version>3.1.2</version>
+</dependency>
+~~~
+
+②  Mybatis配置文件sqlMapConfig.xml进行配置
+
+③ 实体类配置主键
+
+④ 定义通用mapper
+
+⑤ 测试
+
 
 
 
@@ -2481,13 +2692,11 @@ public class ExamplePlugin implements Interceptor{
 
 #### 8、Mybatis连接池和事务控制
 
-#### 
-
 #### 13、Mybatis延迟加载策略
 
-#### 14、Mybatis缓存
-
 #### 15、Tomcat配置JNDI数据源
+
+
 
 ## 四、扩展知识
 
