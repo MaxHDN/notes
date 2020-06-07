@@ -32,7 +32,7 @@ INSERT INTO `user` VALUES (2, 'tom', '123');
 ALTER TABLE table_name ADD COLUMN sort VARCHAR(20) DEFAULT NULL COMMENT '排序字段'
 ~~~
 
-## 四、修改字段的类型
+## 四、修改表字段的类型
 
 ~~~mysql
 -- alter table 表名 modify column 字段名 类型;
