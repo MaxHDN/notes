@@ -2930,9 +2930,96 @@ JNDI:java naming directory interface(java命名目录接口)，它是一种该�
 
 
 
-## 四、扩展知识
+## 第十一部分 Mybatis源码剖析
 
-#### 1、元数据
+### 11.1 Mybatis架构原理
+
+#### 11.1.1 架构设计
+
+![image-20200608193636583](..\img-folder\image-20200608193636583.png)
+
+我们把Mybatis的功能架构分为三层:
+
+（1）**API接口层**：提供给外部使用的接口API，开发人员通过这些API来操纵数据库。接口层一接收到
+调用请求就会调用数据处理层来完成具体的数据处理。
+
+MyBatis和数据库的交互有两种方式：
+
+a.使用传统的MyBatis提供的API;
+
+b.使用Mapper代理的方式
+
+（2）**数据处理层**：负责具体的SQL查找、SQL解析、SQL执行和执行结果映射处理等。它主要的目的是根
+据调用的请求完成一次数据库操作。
+
+（3）**基础支撑层**：负责最基础的功能支撑，包括连接管理、事务管理、配置加载和缓存处理，这些都是共
+用的东西，将他们抽取出来作为最基础的组件。为上层的数据处理层提供最基础的支撑。
+
+
+
+#### 11.1.2 主要构件及其相互关系
+
+![image-20200608194326636](..\img-folder\image-20200608194326636.png)
+
+![image-20200608194550169](..\img-folder\image-20200608194550169.png)
+
+![image-20200608194707699](..\img-folder\image-20200608194707699.png)
+
+#### 11.1.3 总体流程
+
+（1）**加载配置并初始化**
+
+**触发条件**：加载配置文件
+
+配置来源于两个地方，一个是配置文件(主配置文件conf.xml,mapper文件* .xm)，一个是java代码中的注解，将主配置文件内容解析封装到Configuration,将sql的配置信息加载成为一个mappedstatement对象，存储在内存之中
+
+（2）**接收调用请求**
+
+**触发条件**：调用Mybatis提供的API
+
+传入参数：为SQL的ID和传入参数对象
+
+处理过程：将请求传递给下层的请求处理层进行处理。
+
+（3）处理操作请求
+
+**触发条件**：API接口层传递请求过来
+
+**传入参数**：为SQL的ID和传入参数对象
+
+处理过程:
+
+(A) 根据SQL的ID查找对应的MappedStatement对象。
+
+(B) 根据传入参数对象解析MappedStatement对象，得到最终要执行的SQL和执行传入参数。
+
+(C) 获取数据库连接，根据得到的最终SQL语句和执行传入参数到数据库执行，并得到执行结果。
+
+(D) 根据MappedStatement对象中的结果映射配置对得到的执行结果进行转换处理，并得到最终的处理结果。
+
+(E) 释放连接资源。
+
+(4) 返回处理结果
+
+将最终的处理结果返回。
+
+​	
+
+### 11.2 Mybatis源码剖析
+
+源码剖析见Mybatis源码工程
+
+#### 11.2.1 传统方式的源码剖析
+
+#### 11.2.2 Mapper代理方式源码剖析
+
+
+
+
+
+## 第十二部分、扩展知识
+
+#### 12.1、元数据
 
 数据表是用来存储我们业务数据的，而元数据是用来描述数据表的，比如这个表的表结构，有哪些字段等信息。本节课我们要知道查询结果集中有哪些数据项就可以通过元数据技术获取。
 
@@ -2940,11 +3027,311 @@ JNDI:java naming directory interface(java命名目录接口)，它是一种该�
 
 ![img](..\img-folder\wps123.jpg)
 
-####  2、Mybatis源码中的设计模式
+####  12.2、Mybatis源码中的设计模式
 
-建造者模式，工厂模式，代理模式
+#### 12.2.1 构建者模式
+
+Builder模式的定义是“将一个复杂对象的构建与它的表示分离，使得同样的构建过程可以创建不同的表示。”，它属于创建类模式，一般来说，如果一个对象的构建比较复杂，超出了构造函数所能包含的范围，就可以使用工厂模式和Builder模式，相对于工厂模式会产出一个完整的产品，Builder应用于 更加复杂的对象的构建，甚至只会构建产品的一个部分，直白来说，就是使用多个简单的对象-步-步构建成一个复杂的对象
+
+例子：使用构建者设计模式来生产computer
+
+主要步骤:
+
+① 将需要构建的目标类分成多个部件(电脑可以分为主机、显示器、键盘、音箱等部件) ;
+
+② 创建构建类
+
+③ 依次创建部件
+
+④ 将部件组装成目标对象
+
+定义一个computer
+
+~~~java
+public class Computer {
+    private String displayer;
+    private String mainUnit;
+    private String mouse;
+    private String keyboard;
+    
+    public String getDisplayer() {
+    	return displayer;
+    }
+    
+    public void setDisplayer(String displayer) {
+    	this.displayer = displayer;
+    }
+    
+    public String getMainUnit() {
+    	return mainUnit;
+    }
+    
+    public void setMainUnit(String mainUnit) {
+    	this.mainUnit = mainUnit;
+    }
+    
+    public String getMouse() {
+    	return mouse;
+    }
+    
+    public void setMouse(String mouse) {
+    	this.mouse = mouse;
+    }
+    
+    public String getKeyboard() {
+    	return keyboard;
+    }
+    
+    public void setKeyboard(String keyboard) {
+    	this.keyboard = keyboard;
+    }
+    
+    @Override
+    public String toString() {
+        return "Computer{" +
+                "displayer='" + displayer + '\'' +
+                ", mainUnit='" + mainUnit + '\'' +
+                ", mouse='" + mouse + '\'' +
+                ", keyboard='" + keyboard + '\'' +
+                '}';
+}
+~~~
+
+ComputrerBuilder
+
+~~~java
+public static class ComputerBuilder{
+    private ComputerBuilder target =new ComputerBuilder();
+    
+    public Builder installDisplayer(String displayer){
+        target.setDisplayer(displayer);
+        return this;
+    }
+    
+    public Builder installMainUnit(String mainUnit){
+        target.setMainUnit(mainUnit);
+        return this;
+    }
+    
+    public Builder installMouse(String mouse){
+        target.setMouse(mouse);
+        return this;
+    }
+    
+    public Builder installKeybord(String keyboard){
+        target.setKeyboard(keyboard);
+        return this;
+    }
+    
+    public ComputerBuilder build(){
+    	return target;
+    }
+}
+~~~
+
+调用
+
+~~~java
+public static void main(String[] args) {
+    ComputerBuilder computerBuilder = new ComputerBuilder();
+    computerBuilder.installDisplayer("显示器")
+    computerBuilder.installMainUnit("主机");
+    computerBuilder.installKeybord("键盘");
+    computerBuilder.installMouse("鼠标");
+    Computer computer = computerBuilder.Builder();
+    System.out.println(computer);
+}
+~~~
 
 
 
+Mybatis中的体现
 
+SqlSessionFactory的构建过程:
 
+Mybatis的初始化工作非常复杂，不是只用一个构造函数就能搞定的。所以使用了建造者模式,使用了大量的Builder，进行分层构造，核心对象Configuration使用了XmlConfigBuilder来进行构造。
+
+![image-20200608200654422](..\img-folder\image-20200608200654422.png)
+
+在Mybatis环境的初始化过程中，SqlSessionFactoryBuilder 会调用XMLConfigBuilder读取所有的
+MybatisMapConfig.xml和所有的*Mapper.xml文件,构建Mybatis运行的核心对象Configuration对
+象，然后将该Configuration对象作为参数构建-个SqISessionFactory对象。
+
+具体过程见源码
+
+#### 12.2.2 工厂模式
+
+在Mybatis中比如SqlSessionFactory使用的是工厂模式，该工厂没有那么复杂的逻辑，是-个简单工厂
+模式。
+
+简单工厂模式(Simple Factory Pattern):又称为静态工厂方法(Static Factory Method)模式，它属于创
+建型模式。
+
+在简单工厂模式中，可以根据参数的不同返回不同类的实例。简单工厂模式专门定义一个类来负责创建
+其他类的实例，被创建的实例通常都具有共同的父类
+
+例子:生产电脑
+
+假设有一个电脑的代工生产商，它目前已经可以代工生产联想电脑了，随着业务的拓展，这个代工生产
+商还要生产惠普的电脑，我们就需要用-个单独的类来专门生产电脑，这就用到了简单工厂模式。下面
+我们来实现简单工厂模式:
+
+1.创建抽象产品类
+
+我们创建一个电脑的抽象产品类，他有一个抽象方法用于启动电脑:
+
+~~~java
+public abstract class Computer {
+    /**
+    *产品的抽象方法，由具体的产品类去实现
+    */
+    public abstract void start( ) ;
+}
+~~~
+
+2.创建具体产品类
+
+接着我们创建各个品牌的电脑，他们都继承了他们的父类Computer，并实现了父类的start方法: 
+
+~~~java
+public class LenovoComputer extends Computer {
+    @Override
+    public void start( ) {
+    System. out . pr intln("联想电脑启动");
+}
+~~~
+
+~~~java
+public class HpComputer extends Computer {
+    @Override 
+    public void start() {
+    System. out. pr intln("惠普电脑启动");
+}
+~~~
+
+3.创建工厂类
+
+接下来创建一个工厂类,它提供了一个静态方法createComputer用来生产电脑。你只需要传入你想生产的电脑的品牌，它就会实例化相应品牌的电脑对象
+
+~~~java
+public class ComputerFactory {
+    public static Computer createComputer(String type){
+        Computer mComputer=null;
+        switch (type) {
+            case "lenovo":
+            	mComputer=new LenovoComputer();
+            	break;
+            case "hp":
+            	mComputer=new HpComputer();
+            	break;
+        }
+        return mComputer;
+    }
+}
+~~~
+
+客户端调用工厂类
+
+客户端调用工厂类，传入"hp”生产 出惠普电脑并调用该电脑对象的start方法:
+
+~~~java
+public class CreatComputer {
+    public static void main(String[]args){
+    	ComputerFactory.createComputer("hp").start();
+    }
+}
+~~~
+
+Mybatis中的体现：SqlSessionFactory创建SqlSession对象使用设计模式，见源码
+
+#### 12.2.3 代理模式
+
+代理模式(Proxy Pattern):给某一个对象提供一个代理， 并由代理对象控制对原对象的引用。代理模式
+的英文叫做Proxy，它是一种对象结构型模式，代理模式分为静态代理和动态代理，我们来介绍动态代
+理。
+
+举例:
+
+创建一个抽象类， Person接口， 使其拥有- -个没有返回值的doSomething方法。
+
+~~~java
+/**
+* 抽象类
+*/
+public interface Person {
+	void doSomething();
+}
+~~~
+
+创建一个名为Bob的Person接口的实现类，使其实现doSomething方法
+
+~~~java
+/**
+	创建一-个名为Bob的人的实现类
+*/
+public class Bob implements Person {
+    public void doSomething( ) {
+    	System. out. println( "Bob doing something!" );
+    }
+}
+~~~
+
+(3)创建jDK动态代理类，使其实现InvocationHandler接口。拥有一个名为target的变量，并创建getTarget获取代理对象方法。
+
+~~~java
+/**
+* JDK动态代理
+* 需实现InvocationHandler接口
+*/
+public class JDKDynamicProxy implements InvocationHandler {
+    //被代理的对象
+    Person target;
+    // JDKDynamicProxy构造函数
+    public JDKDynamicProxy (Person person) {
+    	this. target = person;
+	}
+	//获取代理对象
+    public Person getTarget( ) {
+        return (Person)Proxy.newProxyInstance(target.getClass( ).getClassLoader(),
+        target.getClass().getInterfaces(),this);
+    }
+	//动态代理invoke方法
+public Person invoke ( object proxy, Method method, Object[ ] args) throws Throwable {
+    //被代理方法前执行:
+    System . out . pr intln( " JDKDynamicProxy do something before!" ) ;
+    //执行被代理的方法
+    Person result = (Person) method. invoke(target，args) ;
+    // 被代理方法后执行
+    System . out . pr intln( " JDKDynamicProxy do something after!") ;
+    return
+    result ;
+    }
+}
+~~~
+
+创建JDK动态代理测试类JDKDynamicTest
+
+~~~java
+/**
+* JDK动态代理测试
+*/
+public class JDKDynamicTest {
+	public static void main(String[] args) {
+        System.out.print1n( "不使用代理类,调用doSomething方法。");
+        //不使用代理类
+        Person person = new Bob();
+        //调用doSomething方法
+        person.doSomething();
+        System.out.println("-------分割线------");
+        System.out.print1n( "使用代理类,调用doSomething方法。");
+        //获取代理类
+        Person proxyPerson = new JDKDynamicProxy(new Bob( )).getTarget();
+        //调用doSomething方法
+        proxyPerson.doSomething();
+    }
+}
+~~~
+
+Mybatis中实现:
+
+代理模式可以认为是Mybatis的核心使用的模式，正是由于这个模式，我们只需要编写Mapper . java接口，不需要实现，由Mybatis后台帮我们完成具体SQL的执行。当我们使用Configuration的getMapper方法时，会调用mapperRegistry.getMapper方法， 而该方法又会调用mapperProxyFactory.newlnstance(sqlSession)来生成一个具 体的代理。具体实现见源码
