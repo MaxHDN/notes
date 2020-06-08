@@ -2678,23 +2678,255 @@ Mybatis可以使用第三方的插件来对功能进行扩展，分页助手Page
 
 ②  Mybatis配置文件sqlMapConfig.xml进行配置
 
+```xml
+<plugin interceptor="tk.mybatis.mapper.mapperhelper.MapperInterceptor">
+    <!--通用Mapper接口，多个通用接口用逗号隔开-->
+    <property name="mappers" value="tk.mybatis.mapper.common.Mapper"/>
+</plugin>
+```
+
 ③ 实体类配置主键
+
+![image-20200608102314258](..\img-folder\image-20200608102314258.png)
 
 ④ 定义通用mapper
 
+~~~
+package com.daonian.practice.mybatis.mapper;
+
+import tk.mybatis.mapper.common.Mapper;
+
+
+/**
+ * MyBatis动态代理开发方式
+ */
+public interface IUserMapper extends Mapper<MybatiCommonMapperUser> {
+}
+~~~
+
 ⑤ 测试
 
+```java
+// 测试通用mapper
+@Test
+public void testGeneralMapper(){
+    // 实体对象
+    MybatiCommonMapperUser mybatiCommonMapperUser = new MybatiCommonMapperUser();
+    mybatiCommonMapperUser.setId(1);
+    mybatiCommonMapperUser.setPassword("321");
+
+    // 根据主键进行查询
+    MybatiCommonMapperUser mybatiCommonMapperUser1 = userMapper.selectByPrimaryKey(1);
+    System.out.println(mybatiCommonMapperUser1);
+
+    // 根据实体对象查询，查询语句的where条件是根据实体对象中属性决定的，
+    // 如果实体对象只有一个id有值，where id = #{id}
+    // 2个就是 where id = #{id} and username = #{username}
+    // 依次类推
+    MybatiCommonMapperUser mybatiCommonMapperUser2 = userMapper.selectOne(mybatiCommonMapperUser);
+    System.out.println(mybatiCommonMapperUser2);
+
+    // 实体对象
+    MybatiCommonMapperUser mybatiCommonMapperUser3 = new MybatiCommonMapperUser();
+    mybatiCommonMapperUser3.setId(4);
+    mybatiCommonMapperUser3.setUsername("lisi");
+    mybatiCommonMapperUser3.setPassword("321");
+
+    // 插入实体对象,null值也会保存，不会使用数据库默认值
+    userMapper.insert(mybatiCommonMapperUser3);
+    sqlSession.commit();
+
+    // 插入实体对象,null值不会保存，使用数据库默认值
+    MybatiCommonMapperUser mybatiCommonMapperUser4 = new MybatiCommonMapperUser();
+    mybatiCommonMapperUser4.setId(5);
+    mybatiCommonMapperUser4.setUsername("lisi");
+    mybatiCommonMapperUser4.setPassword("321");
+    userMapper.insertSelective(mybatiCommonMapperUser4);
+    sqlSession.commit();
+
+    // 更新接口，根据主键更新实体全部字段，null值会被更新
+    MybatiCommonMapperUser mybatiCommonMapperUser5 = new MybatiCommonMapperUser();
+    mybatiCommonMapperUser5.setId(4);
+    mybatiCommonMapperUser5.setUsername("lisi");
+    mybatiCommonMapperUser5.setPassword("123");
+    userMapper.updateByPrimaryKey(mybatiCommonMapperUser5);
+    sqlSession.commit();
+
+    // 根据主键进行删除
+    userMapper.deleteByPrimaryKey(5);
+    sqlSession.commit();
+
+    // 根据实体对象进行删除
+    userMapper.delete(mybatiCommonMapperUser5);
+    sqlSession.commit();
 
 
+    // example方法
+    Example example = new Example(MybatiCommonMapperUser.class);
+    example.createCriteria().andEqualTo("id",1);
+    example.createCriteria().andLike("password", "123");
+    // 自定义查询
+    List<MybatiCommonMapperUser> users1 = userMapper.selectByExample(example);
+    for (MybatiCommonMapperUser commonMapperUser : users1) {
+        System.out.println(commonMapperUser);
+    }
+}
+```
 
+## 第十部分 其它
 
+### 10.1 连接池
 
+**POOLED使用连接池**
 
-#### 8、Mybatis连接池和事务控制
+ 连接池示意
 
-#### 13、Mybatis延迟加载策略
+![1576430643964](..\img-folder\1576430643964.png)
 
-#### 15、Tomcat配置JNDI数据源
+ 
+
+**Mybatis连接池初始化时机**
+
+![1576430656070](..\img-folder\1576430656070.png)
+
+在构建工厂的时候创建Mybatis的数据库连接池
+
+![img](..\img-folder\wps130.jpg) 
+
+**什么时候从连接池获取连接**
+
+getMapper的时候还是真正调用api操作数据库的时候？
+
+从连接池获取连接的时机：真正操作数据库调用api的时候，不是getMapper的时候
+
+![img](E:\lagou\高级工程师训练营\学习笔记\docs\img-folder\wps131.jpg) 
+
+ 其他
+
+ UNPOOLED：不使用数据库连接池（一般不使用）
+
+ JNDI:(前提你的Mybatis环境必须是Web应用)（了解）
+
+**什么是JNDI**
+
+JNDI:java naming directory interface(java命名目录接口)，它是一种该服务发布技术，可以通过JNDI技术把数据源发布成一个服务，那么客户端可以调用这个服务
+
+ 为什么必须是web应用
+
+因为支持JNDI技术的往往是tomcat/weblogic/websphere这些中间件才支持JNDI技术
+
+如果在Mybatis当中用，怎么用？
+
+### 10.2 Mybatis延迟加载策略
+
+关联对象：数据库层次用户和订单是关联表，在对象层次订单对象和用户对象就叫做关联对象
+
+#### 10.2.1 什么是延迟加载？
+
+在使用关联对象的过程中
+
+比如使用了Orders对象，但是我只是获取Orders的订单数据尚未获取user的数据，但是依然查询了user表（这不是延迟）
+
+我orders.getNumber()你不要查user表的数据，当我orders.getUser()你再去查user表
+
+关联查询的关联对象，在较多的场合中并不需要的时候，只在少部分场合需要关联的那个对象数据，可以考虑使用延迟加载
+
+#### 10.2.2 Mybatis中怎么实现延迟加载？
+
+步骤1：原来关联sql语句要拆分
+
+1） 第一条sql查询基础表
+
+2） 第二条sql根据基础表的条件查询关联表
+
+步骤2：让两条sql自动产生联系，通过
+
+~~~xml
+<association column="" select=""/> 
+<!--或者-->
+<collection column="" select =""/>
+~~~
+
+ **全局延迟加载开关配置（一对一和一对多都需要开启）**
+
+~~~xml
+ <!-- 开启延迟加载 -->
+<setting name="lazyLoadingEnabled" value="true" />
+<!-- 关闭立即加载 -->
+<setting name="aggressiveLazyLoading" value="false" />
+<!-- 设定tostring等方法延迟加载 -->
+<setting name="lazyLoadTriggerMethods" value="true" />
+~~~
+
+**一对一关联查询的延迟加载**
+
+```xml
+<select id="queryOrdersWithUser" resultMap="ordersUserResultMap">
+      SELECT
+      o.`id`,
+      o.`user_id`,
+      o.`number`,
+      o.`createtime`,
+      o.`note`
+      FROM
+      orders o
+</select>
+
+<!--
+      延迟加载分析
+      1、原来关联查询的sql语句必然要拆分，如果不拆分，那肯定要执行关联查询，两个表用不用都要查
+      2、sql=sql1+sql2拆分之后，要让这两个sql自动产生联系
+      sql1:select id,user_id,number,createtime,note from orders
+      sql2:select * from user u where id=user_id
+      -->
+
+<resultMap id="ordersUserResultMap" type="orders">
+<id column="id" property="id"/>
+<result column="user_id" property="userId"/>
+<result column="number" property="number"/>
+<result column="createtime" property="createtime"/>
+<result column="note" property="note"/>
+<association property="user" javaType="user" column="user_id" select="com.mybatis.mapper.UserMapper.queryUserByUserId">
+</association>
+</resultMap>
+
+<select id="queryUserByUserId"  parameterType="int" resultType="user">
+      select id,username,sex,birthday,address from user where id=#{user_id}
+</select> 
+```
+
+**一对多关联查询的延迟加载**
+
+```xml
+<select id="queryUserWithOrders" resultMap="userOrdersResultMap">
+      SELECT
+      u.`id`,
+      u.`username`,
+      u.`sex`,
+      u.`birthday`,
+      u.`address`
+      FROM
+      USER u
+</select>
+
+<resultMap id="userOrdersResultMap" type="user">
+<id column="id" property="id"/>
+<result column="username" property="username"/>
+<result column="sex" property="sex"/>
+<result column="birthday" property="birthday"/>
+<result column="address" property="address"/>
+
+<collection property="ordersList" ofType="orders" column="id" select="com.mybatis.mapper.OrdersMapper.queryOrdersByUserId">
+</collection>
+</resultMap>
+
+<!--拆分的第二条sql语句-->
+<select id="queryOrdersByUserId" parameterType="int" resultType="orders">
+      select o.id,o.user_id,o.number,o.createtime,o.note  from orders o  where o.user_id=#{id}
+</select> 
+```
+
+### 10.3 Tomcat配置JNDI数据源
 
 
 
@@ -2702,9 +2934,15 @@ Mybatis可以使用第三方的插件来对功能进行扩展，分页助手Page
 
 #### 1、元数据
 
+数据表是用来存储我们业务数据的，而元数据是用来描述数据表的，比如这个表的表结构，有哪些字段等信息。本节课我们要知道查询结果集中有哪些数据项就可以通过元数据技术获取。
+
+**MetaData：元数据的意思**
+
+![img](..\img-folder\wps123.jpg)
+
 ####  2、Mybatis源码中的设计模式
 
-
+建造者模式，工厂模式，代理模式
 
 
 
