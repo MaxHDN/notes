@@ -3250,6 +3250,14 @@ Mybatis中的体现：SqlSessionFactory创建SqlSession对象使用设计模式�
 的英文叫做Proxy，它是一种对象结构型模式，代理模式分为静态代理和动态代理，我们来介绍动态代
 理。
 
+JDK动态代理
+
+由于java的单继承，动态生成的代理类已经继承了Proxy类的，就不能再继承其他的类，所以只能靠实现被代理类的接口的形式，故JDK的动态代理必须有接口。
+
+另外，为何调用代理类的方法就会自动进入InvocationHandler 的 invoke（）方法呢？
+
+其实是因为在动态代理类的定义中，构造函数是含参的构造，参数就是我们invocationHandler 实例，而每一个被代理的接口方法都会在代理类中生成一个对应的实现方法，并在实现方法中最终调用invocationHandler 的invoke方法，这就解释了为何执行代理类的方法会自动进入到我们自定义的invocationHandler的invoke方法中，然后在我们的invoke方法中再利用jdk反射的方式去调用真正的被代理类的业务方法，而且还可以在方法的前后去加一些我们自定义的逻辑。比如切面编程AOP等
+
 举例:
 
 创建一个抽象类， Person接口， 使其拥有- -个没有返回值的doSomething方法。
