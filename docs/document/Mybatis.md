@@ -2965,15 +2965,75 @@ b.使用Mapper代理的方式
 
 ![image-20200608194707699](..\img-folder\image-20200608194707699.png)
 
+不同组件做的事情
+
+* SqlSession
+
+  ```java
+  	<T> T selectOne(String statement, Object parameter);
+      <E> List<E> selectList(String statement, Object parameter, RowBounds rowBounds);
+      <K, V> Map<K, V> selectMap(String statement, String mapKey);
+      <T> Cursor<T> selectCursor(String statement, Object parameter, RowBounds rowBounds);
+      void select(String statement, Object parameter, RowBounds rowBounds, ResultHandler handler)
+  	int insert(String statement);
+      int update(String statement, Object parameter);
+      int delete(String statement, Object parameter);
+  ```
+
+从SqlSession接口中方法的参数可知，都必须要传一个statement参数，statement=namespace.id。而statement参数用来获取封装sql语句的MappedStatement。
+
+SqlSesson的功能：
+
+​	① 获取mappedStatement对象，交给Executor执行器处理
+
+​	② 对输入参数进行处理，处理逻辑见源码
+
+​	③ 创建分页对象，交给Executor执行器处理
+
+​	④ 对于selectMap方法，使用DefaultMapResultHandler处理返回结果List
+
+Executor的功能：
+
+​	① 根据传入的参数动态获得SQL语句，最后返回用BoundSql对象表示。（区别与对占位符赋值）
+
+​	② 实现一级缓存
+
+​    ③ 实现延迟加载
+
+​    ④ 获取connection连接
+
+​	④ 创建StatementHandler
+
+CachedExecutor：
+
+​	① 实现了二级缓存
+
+**StatementHandler**
+
+​	①  负责处理JDBC,包括对statement设置参数，对结果集转换成List
+
+**Parameterhandler**
+
+​	① 设置 SQL 上的参数，例如 PrepareStatement 对象上的占位符
+
+**ResultSetHandler**
+
+​	① 处理结果集ResultSet转换成List
+
 #### 11.1.3 总体流程
 
 （1）**加载配置并初始化**
 
 **触发条件**：加载配置文件
 
-配置来源于两个地方，一个是配置文件(主配置文件conf.xml,mapper文件* .xm)，一个是java代码中的注解，将主配置文件内容解析封装到Configuration,将sql的配置信息加载成为一个mappedstatement对象，存储在内存之中
+配置来源于两个地方，一个是配置文件(主配置文件conf.xml,mapper文件* .xm)，一个是java代码中的注解，将主配置文件内容解析封装到Configuration,将sql的配置信息加载成为一个mappedstatement对象，存储在内存之中。
 
-（2）**接收调用请求**
+Mybatis初始化过程
+解析配置信息：sqlMapConfig.xml、mapper.xml文件、mapper接口中的注解
+
+初始过程中涉及的对象：Resources、configuration、xmlConfigBuilder、xmlMapperBuilder、mappedstatment、sqlSource
+
+注解的解析过程在MapperAnnotationBuilder.parse()
 
 **触发条件**：调用Mybatis提供的API
 
@@ -3007,15 +3067,1128 @@ b.使用Mapper代理的方式
 
 ### 11.2 Mybatis源码剖析
 
-源码剖析见Mybatis源码工程
+#### 11.2.1 Mybatis初始化源码剖析
 
-#### 11.2.1 传统方式的源码剖析
+​		Mybatis的配置信息配置在主配置文件sqlMapConfig.xml、mapper.xml和mapper接口注解中。mybatis和数据库交互之前需要将这些配置信息解析到Configuration对象中，并加载到内存。
 
-#### 11.2.2 Mapper代理方式源码剖析
+（1）应用端提供配置文件，使用Resources类读取配置文件生成字节输入流。
+
+~~~java
+    // 1. 读取配置文件成字节输入流，注意：现在还没解析
+    InputStream inputStream = Resources.getResourceAsStream("sqlMapConfig.xml");
+~~~
+
+（2）使用SqlSessionFactoryBuilder解析配置文件，封装Configuration对象，并返回SqlSessionFactory对象。
+
+~~~java
+	// 2. 解析配置文件，封装Configuration对象   创建DefaultSqlSessionFactory对象
+	SqlSessionFactory sqlSessionFactory = new                                                              sqlSessionFactoryBuilder().build(inputStream);
+~~~
+
+​		进入sqlSessionFactoryBuilder().build(inputStream)源码
+
+~~~java
+	// 2.1 最初调用的build重载方法
+    public SqlSessionFactory build(InputStream inputStream) {
+        // 然后继续调用重载方法
+        return build(inputStream, null, null);
+    }
+~~~
+
+~~~java
+	// 2.2 重载方法
+    public SqlSessionFactory build(InputStream inputStream, String environment, Properties properties) {
+        try {
+            // 创建 XMLConfigBuilder, XMLConfigBuilder是专门解析mybatis的主配置文件的类
+            XMLConfigBuilder parser = new XMLConfigBuilder(inputStream, environment, properties);
+            // 执行 XML 解析：parser.parse()中才真正解析配置文件，生成Configuration对象，并返回。
+            // 创建 DefaultSqlSessionFactory 对象
+            return build(parser.parse());
+        } catch (Exception e) {
+            throw ExceptionFactory.wrapException("Error building SqlSession.", e);
+        } finally {
+            ErrorContext.instance().reset();
+            try {
+                inputStream.close();
+            } catch (IOException e) {
+                // Intentionally ignore. Prefer previous error.
+            }
+        }
+    }
+~~~
+
+​		进入XmlConfigBuilder.parse()方法
+
+~~~java
+   /**
+     * 解析 XML 成 Configuration 对象。
+     * @return Configuration 对象
+     */
+    public Configuration parse() {
+        // 若已解析，抛出 BuilderException 异常
+        if (parsed) {
+            throw new BuilderException("Each XMLConfigBuilder can only be used once.");
+        }
+        // 标记已解析
+        parsed = true;
+        // 2.2.1 解析 XML <configuration>标签，<configuration>是MyBatis配置文件中的顶层标签
+        // parser是XPathParser解析器对象，用来解析xml文件,parser.evalNode()返回XNode对象
+        parseConfiguration(parser.evalNode("/configuration"));
+        return configuration;
+    }
+~~~
+
+​		进入XMLConfigBuilder.parseConfiguration(XNode root)方法
+
+~~~java
+	/**
+     * 解析 XML
+     *
+     * 具体 MyBatis 有哪些 XML 标签，
+     * 参见 《XML 映射配置文件》http://www.mybatis.org/mybatis-3/zh/configuration.html
+     *
+     * @param root 根节点
+     */
+    private void parseConfiguration(XNode root) {
+        try {
+            //issue #117 read properties first
+            // 解析 <properties /> 标签
+            propertiesElement(root.evalNode("properties"));
+            // 解析 <settings /> 标签
+            Properties settings = settingsAsProperties(root.evalNode("settings"));
+            // 加载自定义的 VFS 实现类
+            loadCustomVfs(settings);
+            // 解析 <typeAliases /> 标签
+            typeAliasesElement(root.evalNode("typeAliases"));
+            // 解析 <plugins /> 标签
+            pluginElement(root.evalNode("plugins"));
+            // 解析 <objectFactory /> 标签
+            objectFactoryElement(root.evalNode("objectFactory"));
+            // 解析 <objectWrapperFactory /> 标签
+            objectWrapperFactoryElement(root.evalNode("objectWrapperFactory"));
+            // 解析 <reflectorFactory /> 标签
+            reflectorFactoryElement(root.evalNode("reflectorFactory"));
+            // 赋值 <settings /> 到 Configuration 属性
+            settingsElement(settings);
+            // read it after objectFactory and objectWrapperFactory issue #631
+            // 解析 <environments /> 标签
+            environmentsElement(root.evalNode("environments"));
+            // 解析 <databaseIdProvider /> 标签
+            databaseIdProviderElement(root.evalNode("databaseIdProvider"));
+            // 解析 <typeHandlers /> 标签
+            typeHandlerElement(root.evalNode("typeHandlers"));
+            // 2.2.1.1 解析 <mappers /> 标签
+            mapperElement(root.evalNode("mappers"));
+        } catch (Exception e) {
+            throw new BuilderException("Error parsing SQL Mapper Configuration. Cause: " + e, e);
+        }
+    }
+~~~
+
+解析标签的顺序，和mybatis主配置文件中标签的顺序是一致的。这里重点看下解析<mappers>标签的方法。
+
+进入XmlConfigBuilder.mapperElement(XNode parent)
+
+~~~java
+    private void mapperElement(XNode parent) throws Exception {
+        if (parent != null) {
+            // 遍历子节点
+            for (XNode child : parent.getChildren()) {
+                // 如果是 package 标签，则扫描该包
+                if ("package".equals(child.getName())) {
+                    // 获得包名
+                    String mapperPackage = child.getStringAttribute("name");
+                    // 添加到 configuration 中
+                    configuration.addMappers(mapperPackage);
+                // 如果是 mapper 标签，
+                } else {
+                    // 获得 resource、url、class 属性
+                    String resource = child.getStringAttribute("resource");
+                    String url = child.getStringAttribute("url");
+                    String mapperClass = child.getStringAttribute("class");
+                    // 使用相对于类路径的资源引用
+                    if (resource != null && url == null && mapperClass == null) {
+                        ErrorContext.instance().resource(resource);
+                        // 获得 resource 的 InputStream 对象
+                        InputStream inputStream = Resources.getResourceAsStream(resource);
+                        // 创建 XMLMapperBuilder 对象
+                        XMLMapperBuilder mapperParser = new XMLMapperBuilder(inputStream, configuration, resource, configuration.getSqlFragments());
+                        // 执行解析
+                        mapperParser.parse();
+                    // 使用完全限定资源定位符（URL）
+                    } else if (resource == null && url != null && mapperClass == null) {
+                        ErrorContext.instance().resource(url);
+                        // 获得 url 的 InputStream 对象
+                        InputStream inputStream = Resources.getUrlAsStream(url);
+                        // 创建 XMLMapperBuilder 对象
+                        XMLMapperBuilder mapperParser = new XMLMapperBuilder(inputStream, configuration, url, configuration.getSqlFragments());
+                        // 执行解析
+                        mapperParser.parse();
+                    // 使用映射器接口实现类的完全限定类名
+                    } else if (resource == null && url == null && mapperClass != null) {
+                        // 获得 Mapper 接口
+                        Class<?> mapperInterface = Resources.classForName(mapperClass);
+                        // 添加到 configuration 中
+                        configuration.addMapper(mapperInterface);
+                    } else {
+                        throw new BuilderException("A mapper element may only specify a url, resource or class, but not more than one.");
+                    }
+                }
+            }
+        }
+    }
+~~~
+
+<mappers>子标签标签有两种：
+
+~~~xml
+   <!-- 引入mapper.xml -->
+    <mappers>
+        <!-- mapper标签引入单个sql语句配置文件-->
+        <mapper resource = "com/daonian/practice/mybatis/dao/quickStartMapper.xml"/>
+
+        <!-- package标签通过name属性指定mapper接口所在的包名 -->
+        <!-- mapper接口对应的sql映射文件路径和文件名必须和mapper接口一样-->
+        <package name="com/daonian/practice/mybatis/mapper"/>
+    </mappers>
+~~~
+
+① 当解析<package>标签时，调用Configuration.addMappers(mapperPackage)
+
+* 进入Configuration.addMappers(String packageName)
+
+  ~~~java
+  	public void addMappers(String packageName) {
+          // 扫描该包下所有的 Mapper 接口，并添加到 mapperRegistry 中
+          mapperRegistry.addMappers(packageName);
+      }
+  ~~~
+
+  
+
+* 进入MapperRegistry.addmappers(String packageName)
+
+  ~~~java
+  	public void addMappers(String packageName) {
+         //1 进入MapperRegistry.addMappers(String packageName, Class<?> superType)重载方法
+          addMappers(packageName, Object.class);
+      }
+  
+      /**
+       * 扫描指定包，并将符合的类，添加到 {@link #knownMappers} 中
+       */
+      public void addMappers(String packageName, Class<?> superType) {
+          // 扫描指定包下的指定类
+          ResolverUtil<Class<?>> resolverUtil = new ResolverUtil<>();
+          resolverUtil.find(new ResolverUtil.IsA(superType), packageName);
+          Set<Class<? extends Class<?>>> mapperSet = resolverUtil.getClasses();
+          // 遍历，添加到 knownMappers 中
+          for (Class<?> mapperClass : mapperSet) {
+              // 2 处理mapper接口
+              addMapper(mapperClass);
+          }
+      }
+  
+      public <T> void addMapper(Class<T> type) {
+          // 判断，必须是接口。
+          if (type.isInterface()) {
+              // 已经添加过，则抛出 BindingException 异常
+              if (hasMapper(type)) {
+                  throw new BindingException("Type " + type + " is already known to the MapperRegistry.");
+              }
+              boolean loadCompleted = false;
+              try {
+                  // 3 添加到 knownMappers 中
+                  knownMappers.put(type, new MapperProxyFactory<>(type));
+                  // It's important that the type is added before the parser is run
+                  // otherwise the binding may automatically be attempted by the
+                  // mapper parser. If the type is already known, it won't try.
+                  // 4 解析 Mapper 的注解配置
+                  MapperAnnotationBuilder parser = new MapperAnnotationBuilder(config, type);
+                  // 5 解析接口注解中配置的信息 和 加载对应的 XML Mapper
+                  parser.parse();
+                  // 标记加载完成
+                  loadCompleted = true;
+              } finally {
+                  // 若加载未完成，从 knownMappers 中移除
+                  if (!loadCompleted) {
+                      knownMappers.remove(type);
+                  }
+              }
+          }
+      }
+  ~~~
+
+* 进入MapperAnnotationBuilder.parse()
+
+  ~~~java
+  	/**
+       * 解析注解
+       */
+      public void parse() {
+          // 判断当前 Mapper 接口是否应加载过。
+          String resource = type.toString();
+          if (!configuration.isResourceLoaded(resource)) {
+              // 加载对应的 XML Mapper
+              loadXmlResource();
+              // 标记该 Mapper 接口已经加载过
+              configuration.addLoadedResource(resource);
+              // 设置 namespace 属性
+              assistant.setCurrentNamespace(type.getName());
+              // 解析 @CacheNamespace 注解
+              parseCache();
+              // 解析 @CacheNamespaceRef 注解
+              parseCacheRef();
+              // 遍历每个方法，解析其上的注解
+              Method[] methods = type.getMethods();
+              for (Method method : methods) {
+                  try {
+                      // issue #237
+                      if (!method.isBridge()) {
+                          // 执行解析方法上的注解
+                          parseStatement(method);
+                      }
+                  } catch (IncompleteElementException e) {
+                      // 解析失败，添加到 configuration 中
+                      configuration.addIncompleteMethod(new MethodResolver(this, method));
+                  }
+              }
+          }
+          // 解析待定的方法
+          parsePendingMethods();
+      }
+  ~~~
+
+  解析注解的过程中，调用MapperAnnotationBuilder.loadXmlResource()方法，解析mapper接口对应的mapper.xml文件，loadXmlResource()内部也是通过XMLMapperBuilder.parse()解析mapper.xml文件的。具体见 - ② 解析<mapper>标签。
+
+  具体如何解析注解，不在这里叙述。如有需要，可翻看源码。
+
+② 当解析<mapper>标签时，直接调用XMLMapperBuilder.parse()
+
+​     再次回到XmlConfigBuilder.mapperElement(XNode parent)方法中，分析解析<mapper>标签。
+
+* 进入XMLMapperBuilder.parse()方法
+
+  ~~~java
+      public void parse() {
+          // 判断当前 Mapper 是否已经加载过
+          if (!configuration.isResourceLoaded(resource)) {
+              // 解析 `<mapper />` 节点
+              configurationElement(parser.evalNode("/mapper"));
+              // 标记该 Mapper 已经加载过
+              configuration.addLoadedResource(resource);
+              // 绑定 Mapper
+              bindMapperForNamespace();
+          }
+  
+          // 解析待定的 <resultMap /> 节点
+          parsePendingResultMaps();
+          // 解析待定的 <cache-ref /> 节点
+          parsePendingCacheRefs();
+          // 解析待定的 SQL 语句的节点
+          parsePendingStatements();
+      }
+  ~~~
+
+* 进入XMLMapperBuilder.configurationElement(XNode context)
+
+  ~~~java
+      // 解析 <mapper/> 节点
+      private void configurationElement(XNode context) {
+          try {
+              // 获得 namespace 属性
+              String namespace = context.getStringAttribute("namespace");
+              if (namespace == null || namespace.equals("")) {
+                  throw new BuilderException("Mapper's namespace cannot be empty");
+              }
+              // 设置 namespace 属性
+              builderAssistant.setCurrentNamespace(namespace);
+              // 解析 <cache-ref /> 节点
+              cacheRefElement(context.evalNode("cache-ref"));
+              // 解析 <cache /> 节点
+              cacheElement(context.evalNode("cache"));
+              // 已废弃！老式风格的参数映射。内联参数是首选,这个元素可能在将来被移除，这里不会记录。
+              parameterMapElement(context.evalNodes("/mapper/parameterMap"));
+              // 解析 <resultMap /> 节点们
+              resultMapElements(context.evalNodes("/mapper/resultMap"));
+              // 解析 <sql /> 节点们
+              sqlElement(context.evalNodes("/mapper/sql"));
+              // 解析 <select /> <insert /> <update /> <delete /> 节点们
+            buildStatementFromContext(context.evalNodes("select|insert|update|delete"));
+          } catch (Exception e) {
+              throw new BuilderException("Error parsing Mapper XML. The XML location is '" + resource + "'. Cause: " + e, e);
+          }
+      }
+  ~~~
+
+* 解析<select><insert><update><delete>节点
+
+  进入XMLMapperBuilder.buildStatementFromContext()
+
+  ~~~java
+      // 解析 <select /> <insert /> <update /> <delete /> 节点们
+      private void buildStatementFromContext(List<XNode> list) {
+          if (configuration.getDatabaseId() != null) {
+              buildStatementFromContext(list, configuration.getDatabaseId());
+          }
+          buildStatementFromContext(list, null);
+      }
+  	
+  	// 进入重载方法
+      private void buildStatementFromContext(List<XNode> list, String requiredDatabaseId) {
+          //遍历 <select /> <insert /> <update /> <delete /> 节点们
+          for (XNode context : list) {
+              // 创建 XMLStatementBuilder 对象，执行解析
+              final XMLStatementBuilder statementParser = new XMLStatementBuilder(configuration, builderAssistant, context, requiredDatabaseId);
+              try {
+                  statementParser.parseStatementNode();
+              } catch (IncompleteElementException e) {
+                  // 解析失败，添加到 configuration 中
+                  configuration.addIncompleteStatement(statementParser);
+              }
+          }
+      }
+  ~~~
+
+  使用XMLStatementBuilder解析sql语句，这里叙述到这里，不在深入。如有需要，可翻看源码。
+
+  解析完成以后，返回一个Configuration对象。然后将对象传给SqlSessionFactoryBuilder，创建SqlSessionFactory对象。
+
+#### 11.2.2 传统方式使用Mybatis的源码剖析
+
+##### 11.2.2.1 sql执行流程
+
+**SqlSesion**是一个接口，它有两个实现类。一个是DefaultSqlSession（默认）和SqlSessionManager（已弃用）
+
+SqlSession是Mybatis中用于和数据库交互的顶层接口，通常将它与ThreadLocal绑定，一个会话使用一个SqlSession，并且在使用完毕后需要close。
+
+~~~java
+    public class DefaultSqlSession implements SqlSession {
+        private final Configuration configuration;
+        private final Executor executor;
+        ...
+    }
+~~~
+
+**SqlSession**中的两个重要的属性：
+
+* configuration就是初始化的后对象，
+
+* Executor执行器
+
+**Executor**也是一个接口，他有三个常用的实现类：
+
+* BatchExecutor   重用语句并执行批量更新
+* ReuseExecutor  重用预处理prepared statements
+* SimpleExecutor  简单执行器（默认）
 
 
 
+初始化完毕后，就要执行SQL了。分析sql执行流程
 
+~~~java
+    // 生产了DefaultSqlsession实例对象   设置了事务不自动提交  完成了executor对象的创建
+    SqlSession sqlSession = sqlSessionFactory.openSession();
+~~~
+
+* 分析获取SqlSession对象的源码
+
+  进入DefalutSqlSessionFactory.openSession()
+
+  ~~~java
+      // 进入openSession方法
+      @Override
+      public SqlSession openSession() {
+          //getDefaultExecutorType()返回的就是SimpleExecutor
+          return openSessionFromDataSource(configuration.getDefaultExecutorType(), null, false);
+      }
+  ~~~
+
+  进入DefalutSqlSessionFactory.openSessionFromDataSource()
+
+  ~~~java
+      //ExecutorType 为Executor的类型，TransactionIsolationLevel为事务隔离级别，autoCommit是否开启事务
+      //openSession的多个重载方法可以指定获得的SeqSession的Executor类型和事务的处理
+      private SqlSession openSessionFromDataSource(ExecutorType execType, TransactionIsolationLevel level, boolean autoCommit) {
+          Transaction tx = null;
+          try {
+              // 获得 Environment 对象
+              final Environment environment = configuration.getEnvironment();
+              // 创建 Transaction 对象
+              final TransactionFactory transactionFactory = getTransactionFactoryFromEnvironment(environment);
+              tx = transactionFactory.newTransaction(environment.getDataSource(), level, autoCommit);
+              // 创建 Executor 对象
+              final Executor executor = configuration.newExecutor(tx, execType);
+              // 创建 DefaultSqlSession 对象
+              return new DefaultSqlSession(configuration, executor, autoCommit);
+          } catch (Exception e) {
+              // 如果发生异常，则关闭 Transaction 对象
+              closeTransaction(tx); // may have fetched a connection so lets call close()
+              throw ExceptionFactory.wrapException("Error opening session.  Cause: " + e, e);
+          } finally {
+              ErrorContext.instance().reset();
+          }
+      }
+  ~~~
+
+* 这里我们关注创建Executor对象的创建过程
+
+  进入configuration.newExecutor(Transaction transaction, ExecutorType executorType)
+
+  ~~~java
+  /**
+       * 创建 Executor 对象
+       *
+       * @param transaction 事务对象
+       * @param executorType 执行器类型
+       * @return Executor 对象
+       */
+      public Executor newExecutor(Transaction transaction, ExecutorType executorType) {
+          // 获得执行器类型，使用默认ExecutorType.SIMPLE
+          executorType = executorType == null ? defaultExecutorType : executorType; 
+          executorType = executorType == null ? ExecutorType.SIMPLE : executorType; 
+          // 创建对应实现的 Executor 对象
+          Executor executor;
+          if (ExecutorType.BATCH == executorType) {
+              executor = new BatchExecutor(this, transaction);
+          } else if (ExecutorType.REUSE == executorType) {
+              executor = new ReuseExecutor(this, transaction);
+          } else {
+              executor = new SimpleExecutor(this, transaction);
+          }
+          // 如果开启缓存，创建 CachingExecutor 对象，进行包装
+          if (cacheEnabled) {
+              executor = new CachingExecutor(executor);
+          }
+          // 应用插件
+          executor = (Executor) interceptorChain.pluginAll(executor);
+          return executor;
+      }
+  ~~~
+
+  这有几个很重要的点，
+
+  二级缓存：当开启二级缓存的时候，会用CachingExecutor进一步包装executor，具体为什么要进一步包装，可查阅资料二级缓存是如何实现的？CachingExecutor属性、方法翻看源码。
+
+  插件：这里会调用拦截器链的pluginAll方法，对mybatis应用插件。其实pluginAll()方法实际上对Executor对象进行了动态代理，返回了一个代理对象。对Excutor中的方法进行了增强。
+
+* 应用插件，创建Excutor对象的代理对象
+
+  进入方法interceptorChain.pluginAll(Executor executor)
+
+  ~~~java
+      /**
+       * 应用所有插件
+       *
+       * @param target 目标对象
+       * @return 应用结果
+       */
+      public Object pluginAll(Object target) {
+          for (Interceptor interceptor : interceptors) {
+              // 这里是动态代理，生成target（这里是Excutor）的代理对象
+              target = interceptor.plugin(target);
+          }
+          return target;
+      }
+  ~~~
+
+  进入（具体一个插件ExamplePlugin）interceptor.plugin(target)方法
+
+  ~~~java
+    @Override
+    public Object plugin(Object target) {
+      return Plugin.wrap(target, this);
+    }
+  ~~~
+
+  进入Plugin.wrap(target, this)
+
+  ~~~java
+      /**
+       * 创建目标类的代理对象
+       *
+       * @param target 目标类
+       * @param interceptor 拦截器对象
+       * @return 代理对象
+       */
+      public static Object wrap(Object target, Interceptor interceptor) {
+          // 获得拦截的方法映射
+          Map<Class<?>, Set<Method>> signatureMap = getSignatureMap(interceptor);
+          // 获得目标类的类型
+          Class<?> type = target.getClass();
+          // 获得目标类的接口集合
+          Class<?>[] interfaces = getAllInterfaces(type, signatureMap);
+          // 若有接口，则创建目标对象的 JDK Proxy 对象
+          if (interfaces.length > 0) {
+              return Proxy.newProxyInstance(
+                      type.getClassLoader(),
+                      interfaces,
+                      new Plugin(target, interceptor, signatureMap)); // 因为 Plugin 实现了 InvocationHandler 接口，所以可以作为 JDK 动态代理的调用处理器
+          }
+          // 如果没有，则返回原始的目标对象
+          return target;
+      }
+  ~~~
+
+  这里处理具体某个插件，结合下面的自定义的插件，理解上面的代码
+
+  ~~~java
+  @Intercepts({//注意看这个大括号，也就是说这里可以定义多个@Signature对多个地方拦截，
+          @Signature(type = StatementHandler.class,// 这是指拦截哪个接口,这里也可以是Executor
+                  method = "prepare",// 这个接口内的哪个方法名
+                  args = { Connection.class, Integer.class})//这是拦截方法的入参，按顺序写到这，不要多不要少，如果方法重载，可是要通过方法名和入参唯一确定
+          })
+  public class MyPlugin implements Interceptor {
+  
+      // 拦截方法，只要被拦截的目标对象的目标方法被执行时，每次都会执行interceptor方法
+      @Override
+      public Object intercept(Invocation invocation) throws Throwable {
+          // 增强逻辑
+          System.out.println("对方法进行了增强...");
+          return invocation.proceed(); // 执行原方法
+      }
+  	...
+      ...
+      ...
+  }
+  ~~~
+
+  接看下Plugin类的源码
+
+  ~~~java
+  /**
+   * 插件类，一方面提供创建动态代理对象的方法，另一方面实现对指定类的指定方法的拦截处理。
+   *
+   * @author Clinton Begin
+   */
+  public class Plugin implements InvocationHandler {
+  
+      /**
+       * 目标对象
+       */
+      private final Object target;
+      /**
+       * 拦截器
+       */
+      private final Interceptor interceptor;
+      /**
+       * 拦截的方法映射
+       *
+       * KEY：类
+       * VALUE：方法集合
+       */
+      private final Map<Class<?>, Set<Method>> signatureMap;
+  
+      private Plugin(Object target, Interceptor interceptor, Map<Class<?>, Set<Method>> signatureMap) {
+          this.target = target;
+          this.interceptor = interceptor;
+          this.signatureMap = signatureMap;
+      }
+  
+      /**
+       * 创建目标类的代理对象
+       *
+       * @param target 目标类
+       * @param interceptor 拦截器对象
+       * @return 代理对象
+       */
+      public static Object wrap(Object target, Interceptor interceptor) {
+  		// 省略，见上面
+      }
+  
+      @Override
+      public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+          try {
+              // 获得目标方法是否被拦截
+              Set<Method> methods = signatureMap.get(method.getDeclaringClass());
+              if (methods != null && methods.contains(method)) {
+                  // 如果是，则拦截处理该方法
+                  return interceptor.intercept(new Invocation(target, method, args));
+              }
+              // 如果不是，则调用原方法
+              return method.invoke(target, args);
+          } catch (Exception e) {
+              throw ExceptionUtil.unwrapThrowable(e);
+          }
+      }
+      ...
+      ...
+      ...
+  }
+  ~~~
+
+  代理对象每次调用方法时都会进入invoke方法，然后判断被调用的方法是否拦截，如果拦截，则调用插件中的增强方法。这里说到了，插件的实现原理。在回到创建 Executor 对象的步骤。
+
+* 创建完Executor对象后，将configuration、executor传入new DefaultSqlSession(configuration, executor, autoCommit)，创建SqlSession对象返回。
+
+调用SqlSession中的方法，执行Sql语句
+
+~~~java
+    // (1) 根据statementid来从Configuration中map集合中获取到了指定的MappedStatement对象
+    // (2) 将查询任务委派了executor执行器
+    List<Object> objects = sqlSession.selectList("namespace.id");
+
+    // 释放资源
+    sqlSession.close();
+~~~
+
+**调用selectList(),查询数据**
+
+* 进入sqlSession.selectList("namespace.id")方法
+
+  ~~~java
+      //进入selectList方法，多个重载方法
+      @Override
+      public <E> List<E> selectList(String statement) {
+          return this.selectList(statement, null);
+      }
+  
+  	@Override
+      public <E> List<E> selectList(String statement, Object parameter) {
+          // 传一个默认的RowBounds(分页记录对象)
+          return this.selectList(statement, parameter, RowBounds.DEFAULT);
+      }
+  
+  	@Override
+      public <E> List<E> selectList(String statement, 
+                                    Object parameter, 
+                                    RowBounds rowBounds) {
+          try {
+              // 获得 MappedStatement 对象
+              MappedStatement ms = configuration.getMappedStatement(statement);
+              // 执行查询
+              return executor.query(ms, wrapCollection(parameter), 
+                                    rowBounds, Executor.NO_RESULT_HANDLER);
+          } catch (Exception e) {
+              throw ExceptionFactory.wrapException("Error querying database.  Cause: " + e, e);
+          } finally {
+              ErrorContext.instance().reset();
+          }
+      }
+  ~~~
+
+  SqlSession的selectList方法的逻辑是，从Configuration中mappedStatements字段获取MappedStatement对象，然后传给Executor执行器，executor执行器在去执行查询任务。
+
+* 进入SimpleExecutor.query()，这里如果开启二级缓存，会先进入CachedExecutor.query()
+
+  ~~~java
+      //此方法在SimpleExecutor的父类BaseExecutor中实现
+      @Override
+      public <E> List<E> query(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler) throws SQLException {
+          //根据传入的参数动态获得SQL语句，最后返回用BoundSql对象表示
+          BoundSql boundSql = ms.getBoundSql(parameter);
+          //为本次查询创建一级缓存的Key
+          CacheKey key = createCacheKey(ms, parameter, rowBounds, boundSql);
+          // 查询
+          return query(ms, parameter, rowBounds, resultHandler, key, boundSql);
+      }
+  ~~~
+
+  ~~~java
+      // 进入重载方法
+  	@Override
+      public <E> List<E> query(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, CacheKey key, BoundSql boundSql) throws SQLException {
+          ErrorContext.instance().resource(ms.getResource()).activity("executing a query").object(ms.getId());
+          // 已经关闭，则抛出 ExecutorException 异常
+          if (closed) {
+              throw new ExecutorException("Executor was closed.");
+          }
+          // 清空本地缓存，如果 queryStack 为零，并且要求清空本地缓存。
+          // sql语句属性设置 flushCache=true的时候，每一次都清空缓存
+          if (queryStack == 0 && ms.isFlushCacheRequired()) {
+              clearLocalCache();
+          }
+          List<E> list;
+          try {
+              // queryStack + 1
+              queryStack++;
+              // 从一级缓存中，获取查询结果
+              list = resultHandler == null ? (List<E>) localCache.getObject(key) : null;
+              // 获取到，则进行处理
+              if (list != null) {
+                  handleLocallyCachedOutputParameters(ms, key, parameter, boundSql);
+              // 获得不到，则从数据库中查询
+              } else {
+                  list = queryFromDatabase(ms, parameter, rowBounds, resultHandler, key, boundSql);
+              }
+          } finally {
+              // queryStack - 1
+              queryStack--;
+          }
+          if (queryStack == 0) {
+              // 执行延迟加载
+              for (DeferredLoad deferredLoad : deferredLoads) {
+                  deferredLoad.load();
+              }
+              // issue #601
+              // 清空 deferredLoads
+              deferredLoads.clear();
+              // 如果缓存级别是 LocalCacheScope.STATEMENT ，则进行清理
+              if (configuration.getLocalCacheScope() == LocalCacheScope.STATEMENT) {
+                  // issue #482
+                  clearLocalCache();
+              }
+          }
+          return list;
+      }
+  ~~~
+
+  可以对单个sql语句进行设置fluashCache="true",设置后，该语句进行查询的时候每次都要清除一级缓存，然后从数据库中查询数据。如果没有设置，不清除一级缓存。查询时先去一级缓存中查，查到则返回，没有查到则需要到数据库查询。
+
+* 进入从数据库读取操作 queryFromDatabase()
+
+  ~~~java
+      // 从数据库中读取操作
+      private <E> List<E> queryFromDatabase(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, CacheKey key, BoundSql boundSql) throws SQLException {
+          List<E> list;
+          // 在缓存中，添加占位对象。此处的占位符，和延迟加载有关，可见 `DeferredLoad#canLoad()` 方法
+          localCache.putObject(key, EXECUTION_PLACEHOLDER);
+          try {
+              // 执行读操作
+              list = doQuery(ms, parameter, rowBounds, resultHandler, boundSql);
+          } finally {
+              // 从缓存中，移除占位对象
+              localCache.removeObject(key);
+          }
+          // 添加到缓存中
+          localCache.putObject(key, list);
+          // 暂时忽略，存储过程相关
+          if (ms.getStatementType() == StatementType.CALLABLE) {
+              localOutputParameterCache.putObject(key, parameter);
+          }
+          return list;
+      }
+  ~~~
+
+  ~~~java
+  	// 进入doQuery()    
+  	@Override
+      public <E> List<E> doQuery(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) throws SQLException {
+          Statement stmt = null;
+          try {
+              Configuration configuration = ms.getConfiguration();
+              // 传入参数创建StatementHanlder对象来执行查询
+              StatementHandler handler = configuration.newStatementHandler(wrapper, ms, parameter, rowBounds, resultHandler, boundSql);
+              // 创建jdbc中的statement对象
+              stmt = prepareStatement(handler, ms.getStatementLog());
+              // 执行 StatementHandler  ，进行读操作
+              return handler.query(stmt, resultHandler);
+          } finally {
+              // 关闭 StatementHandler 对象
+              closeStatement(stmt);
+          }
+      }
+  ~~~
+
+  这里创建StatementHandler，并查询任务交给了StatementHandler
+
+* 进入 StatementHandler.qurey()
+
+  ~~~java
+      @Override
+      public <E> List<E> query(Statement statement, ResultHandler resultHandler) throws SQLException {
+          String sql = boundSql.getSql();
+          // 执行查询,发送sql到数据库进行查询
+          statement.execute(sql);
+          // 处理返回结果
+          return resultSetHandler.handleResultSets(statement);
+      }
+  ~~~
+
+* 然后resultSetHandler处理返回的结果集
+
+  进入resultSetHandler.handleResultSets(statement)
+
+  ~~~java
+      //
+      // HANDLE RESULT SETS
+      //
+      // 处理 {@link java.sql.ResultSet} 结果集
+      @Override
+      public List<Object> handleResultSets(Statement stmt) throws SQLException {
+          ErrorContext.instance().activity("handling results").object(mappedStatement.getId());
+  
+          // 多 ResultSet 的结果集合，每个 ResultSet 对应一个 Object 对象。而实际上，每个 Object 是 List<Object> 对象。
+          // 在不考虑存储过程的多 ResultSet 的情况，普通的查询，实际就一个 ResultSet ，也就是说，multipleResults 最多就一个元素。
+          final List<Object> multipleResults = new ArrayList<>();
+  
+          int resultSetCount = 0;
+          // 获得首个 ResultSet 对象，并封装成 ResultSetWrapper 对象
+          ResultSetWrapper rsw = getFirstResultSet(stmt);
+  
+          // 获得 ResultMap 数组
+          // 在不考虑存储过程的多 ResultSet 的情况，普通的查询，实际就一个 ResultSet ，也就是说，resultMaps 就一个元素。
+          List<ResultMap> resultMaps = mappedStatement.getResultMaps();
+          int resultMapCount = resultMaps.size();
+          validateResultMapsCount(rsw, resultMapCount); // 校验
+          while (rsw != null && resultMapCount > resultSetCount) {
+              // 获得 ResultMap 对象
+              ResultMap resultMap = resultMaps.get(resultSetCount);
+              // 处理 ResultSet ，将结果添加到 multipleResults 中
+              handleResultSet(rsw, resultMap, multipleResults, null);
+              // 获得下一个 ResultSet 对象，并封装成 ResultSetWrapper 对象
+              rsw = getNextResultSet(stmt);
+              // 清理
+              cleanUpAfterHandlingResultSet();
+              // resultSetCount ++
+              resultSetCount++;
+          }
+  
+          // 因为 `mappedStatement.resultSets` 只在存储过程中使用，本系列暂时不考虑，忽略即可
+          String[] resultSets = mappedStatement.getResultSets();
+          if (resultSets != null) {
+              while (rsw != null && resultSetCount < resultSets.length) {
+                  ResultMapping parentMapping = nextResultMaps.get(resultSets[resultSetCount]);
+                  if (parentMapping != null) {
+                      String nestedResultMapId = parentMapping.getNestedResultMapId();
+                      ResultMap resultMap = configuration.getResultMap(nestedResultMapId);
+                      handleResultSet(rsw, resultMap, null, parentMapping);
+                  }
+                  rsw = getNextResultSet(stmt);
+                  cleanUpAfterHandlingResultSet();
+                  resultSetCount++;
+              }
+          }
+  
+          // 如果是 multipleResults 单元素，则取首元素返回
+          return collapseSingleResultList(multipleResults);
+      }
+  ~~~
+
+  到这里就直接把结果集一层一层返回
+
+  
+
+#### 11.2.3 Mapper代理方式使用Mybatis源码剖析
+
+获取代理对象
+
+~~~java
+    // 前三步和传统的方式一样
+    InputStream inputStream = Resources.getResourceAsStream("sqlMapConfig.xml");
+    SqlSessionFactory factory = new SqlSessionFactoryBuilder().build(inputStream);
+    SqlSession sqlSession = factory.openSession();
+
+    // 这里不在直接调用selectList()这类接口获取
+    UserMapper mapper = sqlSession.getMapper(IUserMapper.class);
+    //代理对象调用接口中的任意方法，执行的都是动态代理中的invoke方法
+    List<Object> allUser = mapper.findAllUser();
+~~~
+
+* 获取代理对象，进入sqlSession.getMapper()方法
+
+  ~~~java
+      @Override
+      public <T> T getMapper(Class<T> type) {
+          return configuration.getMapper(type, this);
+      }
+  ~~~
+
+* 进入configuration.getMapper(type, this)
+
+  ~~~java
+      public <T> T getMapper(Class<T> type, SqlSession sqlSession) {
+          return mapperRegistry.getMapper(type, sqlSession);
+      }
+  ~~~
+
+* 进入mapperRegistry.getMapper()
+
+~~~java
+    public <T> T getMapper(Class<T> type, SqlSession sqlSession) {
+        // 获得 MapperProxyFactory 对象
+        final MapperProxyFactory<T> mapperProxyFactory = (MapperProxyFactory<T>) knownMappers.get(type);
+        // 不存在，则抛出 BindingException 异常
+        if (mapperProxyFactory == null) {
+            throw new BindingException("Type " + type + " is not known to the MapperRegistry.");
+        }
+        // 通过动态代理工厂生成实例。
+        try {
+            return mapperProxyFactory.newInstance(sqlSession);
+        } catch (Exception e) {
+            throw new BindingException("Error getting mapper instance. Cause: " + e, e);
+        }
+    }
+~~~
+
+其中动态代理工厂在mybatis初始的时候，就添加到knownMappers数据结构中了。
+
+* 进入MapperProxyFactory类中的newInstance方法
+
+  ~~~java
+     //MapperProxyFactory类中的newInstance方法
+      public T newInstance(SqlSession sqlSession) {
+          // 创建了JDK动态代理的invocationHandler接口的实现类mapperProxy
+          final MapperProxy<T> mapperProxy = new MapperProxy<>(sqlSession, mapperInterface, methodCache);
+          // 调用了重载方法
+          return newInstance(mapperProxy);
+      }
+  ~~~
+
+* MapperProxy类源码
+
+~~~java
+/**
+ * Mapper Proxy
+ *
+ * @author Clinton Begin
+ * @author Eduardo Macarron
+ */
+public class MapperProxy<T> implements InvocationHandler, Serializable {
+
+    private static final long serialVersionUID = -6424540398559729838L;
+    private final SqlSession sqlSession;
+    private final Class<T> mapperInterface;
+    private final Map<Method, MapperMethod> methodCache;
+
+    // 构造，传入了SqlSession，说明每个session中的代理对象的不同的！
+    public MapperProxy(SqlSession sqlSession, Class<T> mapperInterface, Map<Method, MapperMethod> methodCache) {
+        this.sqlSession = sqlSession;
+        this.mapperInterface = mapperInterface;
+        this.methodCache = methodCache;
+    }
+
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        try {
+            // 如果是 Object 定义的方法，直接调用
+            if (Object.class.equals(method.getDeclaringClass())) {
+                return method.invoke(this, args);
+
+            } else if (isDefaultMethod(method)) {
+                return invokeDefaultMethod(proxy, method, args);
+            }
+        } catch (Throwable t) {
+            throw ExceptionUtil.unwrapThrowable(t);
+        }
+        // 获得 MapperMethod 对象
+        final MapperMethod mapperMethod = cachedMapperMethod(method);
+        // 重点在这：MapperMethod最终调用了执行的方法
+        return mapperMethod.execute(sqlSession, args);
+    }
+~~~
+
+代理对象调用的每一个方法都会到动态代理中的invoke方法中。MapperProxy实现了InvocationHandler接口，所以代理对象调用方法时会进入MapperProxy.invoke()方法中。
+
+* 进入MapperMethod.execute(sqlSession, args)
+
+  ~~~java
+      public Object execute(SqlSession sqlSession, Object[] args) {
+          Object result;
+          //判断mapper中的方法类型，最终调用的还是SqlSession中的方法
+          switch (command.getType()) {
+              case INSERT: {
+                  // 转换参数
+                  Object param = method.convertArgsToSqlCommandParam(args);
+                  // 执行 INSERT 操作
+                  // 转换 rowCount
+                  result = rowCountResult(sqlSession.insert(command.getName(), param));
+                  break;
+              }
+              case UPDATE: {
+                  // 转换参数
+                  Object param = method.convertArgsToSqlCommandParam(args);
+                  // 转换 rowCount
+                  result = rowCountResult(sqlSession.update(command.getName(), param));
+                  break;
+              }
+              case DELETE: {
+                  // 转换参数
+                  Object param = method.convertArgsToSqlCommandParam(args);
+                  // 转换 rowCount
+                  result = rowCountResult(sqlSession.delete(command.getName(), param));
+                  break;
+              }
+              case SELECT:
+                  // 无返回，并且有 ResultHandler 方法参数，则将查询的结果，提交给 ResultHandler 进行处理
+                  if (method.returnsVoid() && method.hasResultHandler()) {
+                      executeWithResultHandler(sqlSession, args);
+                      result = null;
+                  // 执行查询，返回列表
+                  } else if (method.returnsMany()) {
+                      result = executeForMany(sqlSession, args);
+                  // 执行查询，返回 Map
+                  } else if (method.returnsMap()) {
+                      result = executeForMap(sqlSession, args);
+                  // 执行查询，返回 Cursor
+                  } else if (method.returnsCursor()) {
+                      result = executeForCursor(sqlSession, args);
+                  // 执行查询，返回单个对象
+                  } else {
+                      // 转换参数
+                      Object param = method.convertArgsToSqlCommandParam(args);
+                      // 查询单条
+                      result = sqlSession.selectOne(command.getName(), param);
+                      if (method.returnsOptional() &&
+                              (result == null || !method.getReturnType().equals(result.getClass()))) {
+                          result = Optional.ofNullable(result);
+                      }
+                  }
+                  break;
+              case FLUSH:
+                  result = sqlSession.flushStatements();
+                  break;
+              default:
+                  throw new BindingException("Unknown execution method for: " + command.getName());
+          }
+          // 返回结果为 null ，并且返回类型为基本类型，则抛出 BindingException 异常
+          if (result == null && method.getReturnType().isPrimitive() && !method.returnsVoid()) {
+              throw new BindingException("Mapper method '" + command.getName()
+                      + " attempted to return null from a method with a primitive return type (" + method.getReturnType() + ").");
+          }
+          // 返回结果
+          return result;
+      }
+  ~~~
+
+  可以看出，代理对象最终还是调用了SqlSession中的方法了。
+
+  这里还有一个点，参数转换
+
+  进入 method.convertArgsToSqlCommandParam(args)
+
+  ~~~java
+          public Object convertArgsToSqlCommandParam(Object[] args) {
+              return paramNameResolver.getNamedParams(args);
+          }
+  ~~~
+
+  再进入paramNameResolver.getNamedParams(args)
+
+  ~~~java
+      public Object getNamedParams(Object[] args) {
+          final int paramCount = names.size();
+          // 无参数，则返回 null
+          if (args == null || paramCount == 0) {
+              return null;
+          // 只有一个非注解的参数，直接返回首元素
+          } else if (!hasParamAnnotation && paramCount == 1) {
+              return args[names.firstKey()];
+          } else {
+              // 集合。
+              // 组合 1 ：KEY：参数名，VALUE：参数值
+              // 组合 2 ：KEY：GENERIC_NAME_PREFIX + 参数顺序，VALUE ：参数值
+              final Map<String, Object> param = new ParamMap<>();
+              int i = 0;
+              // 遍历 names 集合
+              for (Map.Entry<Integer, String> entry : names.entrySet()) {
+                  // 组合 1 ：添加到 param 中
+                  param.put(entry.getValue(), args[entry.getKey()]);
+                  // add generic param names (param1, param2, ...)
+                  // 组合 2 ：添加到 param 中
+                  final String genericParamName = GENERIC_NAME_PREFIX + String.valueOf(i + 1);
+                  // ensure not to overwrite parameter named with @Param
+                  if (!names.containsValue(genericParamName)) {
+                      param.put(genericParamName, args[entry.getKey()]);
+                  }
+                  i++;
+              }
+              return param;
+          }
+      }
+  ~~~
+
+  源码分析完了
 
 ## 第十二部分、扩展知识
 
