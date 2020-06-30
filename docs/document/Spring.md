@@ -125,23 +125,260 @@ DI：Dependancy Injection（依赖注入）
 **IoC是站在对象（调用类对象）的角度**，某一接口具体实现类的选择控制权从调用类中移除，转交给第三方决定，对象实例化及其管理的权利交给了(反转) 给了容器。
 **DI是站在容器的角度**，容器会把对象依赖的其他对象注入，比如A对象实例化过程中因为声明了一个B类型的属性，那么就需要容器把B对象注入给A。
 
-### 2.2 应用
+### 2.2 Spring IoC基础
 
-#### 2.2.1 Spring IoC基础
+#### 2.2.1 Spring配置概述
 
-##### 2.2.1.1 BeanFactory和ApplicationContext区别
+##### 2.2.1.1 Spring容器高层视图
 
-​		Spring通过一个配置文件描述Bean及Bean之间的依赖关系，利用Java语言的反射功能实例化Bean并建立Bean之间的依赖关系。Spring 的IoC容器在完成这些底层工作的基础上，还提供了Bean实例缓存、生命周期管理、Bean实例代理、事件发布、资源装载等高级服务。
+要使应用程序中的Spring容器成功启动，需要同时具备以下三方面的条件：
 
-​		Bean工厂(com.springframework.beans. factory.BeanFactory)是Spring框架最核心的接口，它提供了高级IoC的配置机制。BeanFactory 使管理不同类型的Java对象成为可能。
+* Spring 框架的类包都已经放到应用程序的类路径下。
 
-​		应用上下文(com.springframework .context.ApplicationContext)建立在BeanFactory基础之上，提供了更多面向应用的功能，它提供了国际化支持和框架事件体系，更易于创建实际应用。一般称BeanFactory 为IoC容器，而称ApplicationContext为应用上下文。但有时为了行文方便，我们也将ApplicationContext称为Spring容器。
+* 应用程序为Spring提供了完备的Bean配置信息。
 
-​		对于二者的用途，我们可以进行简单的划分: BeanFactory 是Spring 框架的基础设施，面向Spring本身，ApplicationContext 面向使用Spring框架的开发者，几乎所有的应用场合都可以直接使用ApplicationContext而非底层的BeanFactory。
+* Bean 的类都已经放到应用程序的类路径下。
 
-![image-20200629173330550](..\img-folder\image-20200629173330550.png)
+Spring启动时读取应用程序提供的Bean配置信息，并在Spring容器中生成一份相应的Bean配置注册表，然后根据这张注册表实例化Bean,装配好Bean之间的依赖关系，为上层应用提供准备就绪的运行环境。
 
-##### 2.2.1.2 启动IoC容器的方式
+Bean配置信息是Bean的元数据信息，它由以下4个方面组成：
+
+* Bean 的实现类。
+
+* Bean 的属性信息，如数据源的连接数、用户名、密码等。
+
+* Bean的依赖关系，Spring根据依赖关系配置完成Bean之间的装配。
+
+* Bean的行为配置，如生命周期范围及生命周期各过程的回调函数等。
+
+​		Bean元数据信息在Spring容器中的内部对应物是由一个个BeanDefinition 形成的Bean注册表，Spring 实现了Bean元数据信息内部表示和外部定义的解耦。Spring 支持多种形式的Bean配置方式。Spring 1.0 仅支持基于XML的配置，Spring 2.0新增基于注解配置的支持， Spring 3.0新增基于Java类配置的支持，而Spring 4.0则新增基于Groovy动态语言配置的支持。
+
+​		下图描述了Spring容器、Bean 配置信息、Bean 实现类及应用程序四者的相互关系。
+
+![image-20200630144614861](..\img-folder\image-20200630144614861.png)
+
+##### 2.2.1.2 基于xml的配置文件介绍
+
+* **XML Schema**
+
+​		对于基于XML的配置，Spring 1.0的配置文件采用DTD格式，Spring 2.0以后采用Schema格式，后者让不同类型的配置拥有了自己的命名空间，使得配置文件更具扩展性。此外，Spring 基于Schema配置方案为许多领域的问题提供了简化的配置方法，配置工作因此得到了大幅简化。
+​		采取基于Schema的配置格式，文件头的声明会复杂一些，先看一个简单的示例，如下:
+
+![image-20200630145700215](..\img-folder\image-20200630145700215.png)
+
+​		要了解文件头所声明的内容，需要学习一些**XML Schema** 的知识。Schema 在文档根节点中通过xmlns对文档所引用的命名空间进行声明。在上面的代码中定义了3个命名空间。
+
+​		① **默认命名空间**：它没有空间名，用于Spring Bean的定义。
+
+​		② **xsi标准命名空间**：这个命名空间用于为每个文档中的命名空间指定相应的Schema样式文件，是W3C定义的标准命名空间。
+
+​		③ **aop命名空间**：这个命名空间是Spring配置AOP的命名空间，即一一种自定义的命名空间。
+
+​		命名空间的定义分为两个步骤:第--步指定命名空间的名称;第二步指定命名空间的Schema文档格式文件的位置，用空格或回车换行进行分隔。
+​		在**第一步**中，需要指定命名空间的缩略名和全名,请看下面配置所定义的命名空间:
+
+```
+	xm1ns:aop= "http://www.springframework.org/schema/aop"
+```
+
+​		aop为命名空间的别名，一-般使用简洁易记的名称，文档后面的元素可通过命名空间别名加以区分，如<<aop:config/>>等。 而 http://ww.springframework.org/schema/aop 为空间的全限定名，习惯上用文档发布机构的官方网站和相关网站目录作为全限定名。这种命名方式既可以标识文档所属的机构，又可以很好地避免重名的问题。但从XMLSchema语法来说，别名和全限定名都可以任意命名。
+
+​		如果命名空间的别名为空，则表示该命名空间为文档默认命名空间。文档中无命名空间前缀的元素都属于默认命名空间，如<beans/>、 <bean/>等 都属于在①处定义的默认命名空间。
+​		在**第二步**中，为每个命名空间指定了对应的Schema文档格式的定义文件，定义的
+语法如下:（中间用空格隔开）
+
+​		<命名空间1>	<命名空间1Schema文件>   <命名空间2>    <命名空间2Schema文件>
+
+​		命名空间使用全限定名，每个组织机构在发布Schema 文件后，都会为该Schema文件提供-一个引用的URL地址，一般使用这个URL地址指定命名空间对应的Schema文件。命名空间名称和对应的Schema文件地址之间使用空格或回车分隔，不同的命名空间之间也使用这种分隔方法。
+​		指定**命名空间的Schema文件地址**有两个用途：**其一**，XML解析器可以获取Schema文件并对文档进行格式合法性验证；**其二**，在开发环境下，IDE可以引用Schema文件对文档编辑提供诱导功能(自动补全功能)。当然，这个Schema文件的远程地址并非一定能够访问，一般的IDE都提供了从本地类路径查找Schema文件的功能，只有找不到时才从远程加载。
+
+​		Spring配置的Schema文件放置在各模块JAR文件内-一个名为config的目录下。
+
+下表对部分Schema文件的用途进行了说明。
+
+| Schema文件       | 说明                                                         |
+| ---------------- | ------------------------------------------------------------ |
+| spring-beans.xsd | 说明: Spring 最主要的Schema,用于配置Bean<br/>命名空间: http://www.springframework.org/schema/beans<br/>Schema文件: https://www.springframework.org/schema/beans/spring-beans.xsd"> |
+| spring-aop.xsd   | 说明: AOP的配置定义的Schema<br/>命名空间: http://www.springframework.org/schema/aop<br/>Schema文件: http://www.springframework.org/schema/aop/spring-aop.xsd |
+| ...              | ...                                                          |
+
+​		虽然Spring为AOP、声明事务、Java EE都提供了专门的Schema XML配置，但Spring也允许继续使用低版本的基于DTD的XML配置方式。Spring 4.0配置的升级是向后兼容的，但我们强烈建议使用新的基于Schema的配置方式。
+​		除支持XML配置方式外，Spring 还支持基于注解、Java 类及Groovy的配置方式，不同的配置方式在“质”上是基本相同的，只是存在“形”的区别。
+
+* **Bean的定义、Bean命名规范**
+
+  具体，见《精通Spring 4.x 企业应用实战开发》5.2节
+
+#### 2.2.2 容器实例化Bean三种方式
+
+##### 2.2.2.1 使⽤⽆参构造函数  
+
+​		在默认情况下，它会通过反射调⽤⽆参构造函数来创建对象。如果类中没有⽆参构造函数，将创建失败  
+
+~~~xml
+<!--配置service对象-->
+<bean id="userService" class="com.lagou.service.impl.TransferServiceImpl"></bean>  
+~~~
+
+##### 2.2.2.2 使用静态方法创建
+
+​		在实际开发中，我们使⽤的对象有些时候并不是直接通过构造函数创建出来的，它可能在创建的过程中会做很多额外的操作。此时会提供⼀个创建对象的⽅法，恰好这个⽅法是static修饰的⽅法。
+
+~~~xml
+<!--使⽤静态⽅法创建对象的配置⽅式-->
+<bean id="userService" class="com.lagou.factory.BeanFactory"
+factory-method="getTransferService"></bean>
+~~~
+
+##### 2.2.2.3 使用对象方法创建
+
+​		此种⽅式和上⾯静态⽅法创建其实类似，区别是⽤于获取对象的⽅法不再是static修饰的了，⽽是
+类中的⼀个普通⽅法。
+​		在早期开发的项⽬中，⼯⼚类中的⽅法有可能是静态的，也有可能是⾮静态⽅法，当是⾮静态⽅法
+时，即可采⽤下⾯的配置⽅式：  
+
+~~~xml
+<!--使⽤实例⽅法创建对象的配置⽅式-->
+<bean id="beanFactory" class="com.lagou.factory.instancemethod.BeanFactory"></bean>
+<bean id="transferService" factory-bean="beanFactory" 
+      factory-method="getTransferService"></bean>
+~~~
+
+#### 2.2.3 依赖注入的方式
+
+​		Spring支持两种依赖注入方式，分别是属性注入和构造函数注入。
+
+##### 2.2.3.1 属性注入
+
+​		属性注入指通过setXxx()方法注入Bean 的属性值或依赖对象。由于属性注入方式具有可选择性和灵活性高的优点，因此属性注入是实际应用中最常采用的注入方式。
+
+① 属性注入实例
+
+​		属性注入要求Bean提供--个默认的构造函数，并为需要注入的属性提供对应的Setter方法。Spring 先调用Bean的默认构造函数实例化Bean对象，然后通过反射的方式调用Setter方法注入属性值。来看一个简单的例子
+
+~~~java
+public class Car {
+    private int maxSpeed;
+    private String brand;
+    private double price;
+
+    public void setMaxSpeed(int maxSpeed) {
+        this.maxSpeed = maxSpeed;
+    }
+
+    public void setBrand(String brand) {
+        this.brand = brand;
+    }
+
+    public void setPrice(double price) {
+        this.price = price;
+    }
+
+    @Override
+    public String toString() {
+        return "Car{" +
+                "maxSpeed=" + maxSpeed +
+                ", brand='" + brand + '\'' +
+                ", price=" + price +
+                '}';
+    }
+}
+~~~
+
+~~~xml
+	<!--属性注入-->
+    <bean id="car" class="com.duck.pojo.Car">
+        <property name="brand"><value>凯美瑞</value></property>
+        <property name="maxSpeed"><value>200</value></property>
+        <property name="price"><value>200000</value></property>
+    </bean>
+
+    <bean id="transferService" class="com.duck.service.impl.TransferServiceImpl">
+        <!--set+ name 之后锁定到传值的set方法了，通过反射技术可以调用该方法传入对应的值-->
+        <property name="AccountDao" ref="accountDao"></property>
+    </bean>
+~~~
+
+~~~java
+   // 测试
+	@Test
+    public void diWayTest(){
+        ApplicationContext applicationContext = new ClassPathXmlApplicationContext("classpath:applicationContext.xml");
+        Car car = (Car) applicationContext.getBean("car");
+        System.out.println(car);
+    }
+~~~
+
+测试结果
+
+![image-20200630163214831](..\img-folder\image-20200630163214831.png)
+
+② JavaBean关于属性命名的规范
+
+​		Spring配置文件中<property>元素所指定的属性名和Bean实现类的Setter 方法满足，Sun JavaBean的属性命名规范: xxxx的属性对应setXxx()方法。
+
+​		一般情况下，Java的属性变量名都以小写字母开头，如maxSpeed、brand 等，但也存在特殊的情况。考虑到一些特定意义的大写英文缩略词(如USA、XML等),JavaBean也**允许以大写字母开头的属性变量名，不过必须满足“变量的前两个字母要么全部大写, 要么全部小写”的要求**，如brand、IDCode、 IC、ICCard等属性变量名是合法的，而iC、iCcard、iDCode等属性变量名则是非法的。这个并不广为人知的JavaBean规范条款引发了众多让人困惑的配置问题。
+
+​		当变量名是非法的时候，如果<property> name属性值的字符串前两个字母不满足“要么全部大写，要么全部小写”可能会报错。所以name的值最好满足“前两个字母不满足要么全部大写，要么全部小写”
+
+具体报错案列见《精通Spring 4.x 企业应用实战开发》5.3.1节
+
+##### 2.2.3.2 构造函数注入
+
+​		构造函数注入是除属性注入外的另一种常用的注入方式，它保证一-些必要的属性在Bean实例化时就得到设置，确保Bean在实例化后就可以使用。
+
+~~~xml
+    <!--构造函数注入-->
+    <!--按照类型匹配入参-->
+    <bean id="constructorTypeWayCar" class="com.duck.pojo.Car">
+        <constructor-arg type="java.lang.String">
+            <value>雅阁</value>
+        </constructor-arg>
+        <constructor-arg type="int" value="200"/>
+        <constructor-arg type="double">
+            <value>200000</value>
+        </constructor-arg>
+    </bean>
+
+    <!--按照索引匹配入参-->
+    <bean id="constructorIndexWayCar" class="com.duck.pojo.Car">
+        <constructor-arg index="0">
+            <value>200</value>
+        </constructor-arg>
+        <constructor-arg index="1" value="雅阁"/>
+        <constructor-arg index="2">
+            <value>200000</value>
+        </constructor-arg>
+    </bean>
+
+    <!--联合使用类型和索引匹配入参-->
+    <bean id="constructorTypeAndIndexWayCar" class="com.duck.pojo.Car">
+        <constructor-arg index="0" type="int">
+            <value>200</value>
+        </constructor-arg>
+        <constructor-arg index="1" type="java.lang.String" value="雅阁"/>
+        <constructor-arg index="2" type="double">
+            <value>200000</value>
+        </constructor-arg>
+    </bean>
+
+    <!--
+        如果Bean构造函数入参的类型是可辨别的(非基础数据类型且入参类型各异)，
+        由于Java反射机制可以获取构造函数入参的类型，即使构造函数注入的配置不提
+        供类型和索引的信息，Spring依旧可以正确地完成构造函数的注入工作。
+        下面Boss类构造函数的入参就是可辨别的
+	-->
+    <bean id="constructorSimpleWayCar" class="com.duck.pojo.Boss">
+        <constructor-arg value="boss"/>
+        <constructor-arg ref="constructorTypeAndIndexWayCar"/>
+    </bean>
+~~~
+
+#### 2.2.4 集合类型参数注入
+
+
+
+#### 2.2.2 启动IoC容器的方式
 
 * JavaSE环境下启动IoC容器
 
@@ -197,7 +434,21 @@ DI：Dependancy Injection（依赖注入）
   </web-app>
   ~~~
 
-  
+#### 2.2.3 BeanFactory和ApplicationContext区别
+
+​		Spring通过一个配置文件描述Bean及Bean之间的依赖关系，利用Java语言的反射功能实例化Bean并建立Bean之间的依赖关系。Spring 的IoC容器在完成这些底层工作的基础上，还提供了Bean实例缓存、生命周期管理、Bean实例代理、事件发布、资源装载等高级服务。
+
+​		Bean工厂(com.springframework.beans. factory.BeanFactory)是Spring框架最核心的接口，它提供了高级IoC的配置机制。BeanFactory 使管理不同类型的Java对象成为可能。
+
+​		应用上下文(com.springframework .context.ApplicationContext)建立在BeanFactory基础之上，提供了更多面向应用的功能，它提供了国际化支持和框架事件体系，更易于创建实际应用。一般称BeanFactory 为IoC容器，而称ApplicationContext为应用上下文。但有时为了行文方便，我们也将ApplicationContext称为Spring容器。
+
+​		对于二者的用途，我们可以进行简单的划分: BeanFactory 是Spring 框架的基础设施，面向Spring本身，ApplicationContext 面向使用Spring框架的开发者，几乎所有的应用场合都可以直接使用ApplicationContext而非底层的BeanFactory。
+
+![image-20200629173330550](..\img-folder\image-20200629173330550.png)
+
+#### 
+
+
 
 
 
@@ -218,3 +469,7 @@ DI：Dependancy Injection（依赖注入）
 ### 3.2 应用
 
 ### 3.3 源码剖析
+
+## 参考资料
+
+《精通Spring 4.x 企业应用开发实战》 — 陈雄花 林开雄 文建国 编著
