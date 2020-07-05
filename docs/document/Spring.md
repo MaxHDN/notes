@@ -1,3 +1,7 @@
+
+
+
+
 # Spring框架
 
 ## 第一部分 Spring概述
@@ -209,6 +213,10 @@ Bean配置信息是Bean的元数据信息，它由以下4个方面组成：
 
   具体，见《精通Spring 4.x 企业应用实战开发》5.2节
 
+##### 2.2.1.3 简化配置方式
+
+具体，见《精通Spring 4.x 企业应用实战开发》5.4.7
+
 #### 2.2.2 容器实例化Bean三种方式
 
 ##### 2.2.2.1 使⽤⽆参构造函数  
@@ -252,7 +260,7 @@ factory-method="getTransferService"></bean>
 
 ​		属性注入指通过setXxx()方法注入Bean 的属性值或依赖对象。由于属性注入方式具有可选择性和灵活性高的优点，因此属性注入是实际应用中最常采用的注入方式。
 
-① 属性注入实例
+① **属性注入实例**
 
 ​		属性注入要求Bean提供--个默认的构造函数，并为需要注入的属性提供对应的Setter方法。Spring 先调用Bean的默认构造函数实例化Bean对象，然后通过反射的方式调用Setter方法注入属性值。来看一个简单的例子
 
@@ -313,7 +321,7 @@ public class Car {
 
 ![image-20200630163214831](..\img-folder\image-20200630163214831.png)
 
-② JavaBean关于属性命名的规范
+② **JavaBean关于属性命名的规范**
 
 ​		Spring配置文件中<property>元素所指定的属性名和Bean实现类的Setter 方法满足，Sun JavaBean的属性命名规范: xxxx的属性对应setXxx()方法。
 
@@ -322,6 +330,176 @@ public class Car {
 ​		当变量名是非法的时候，如果<property> name属性值的字符串前两个字母不满足“要么全部大写，要么全部小写”可能会报错。所以name的值最好满足“前两个字母不满足要么全部大写，要么全部小写”
 
 具体报错案列见《精通Spring 4.x 企业应用实战开发》5.3.1节
+
+
+
+③ **集合类型参数注入**
+
+​		java.util包中的集合类型是最常用的数据结构类型，主要包括List、 Set、 Map、Properties，Spring 为这些集合类型属性提供了专属的配置标签。
+
+~~~java
+public class Boss {
+    private String name;
+    private Car car;
+    private List<House> houseList;
+    private Set<Child> children;
+    private Map<Object,Object> jobs;
+    private Properties mails;
+    private Map<String,Integer> jobTime;
+
+    public Boss(){
+
+    }
+    public Boss(String name, Car car) {
+        this.name = name;
+        this.car = car;
+    }
+
+    public Boss(String name, Car car, List<House> houseList) {
+        this.name = name;
+        this.car = car;
+        this.houseList = houseList;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public void setCar(Car car) {
+        this.car = car;
+    }
+
+    public void setHouseList(List<House> houseList) {
+        this.houseList = houseList;
+    }
+
+    public void setChildren(Set<Child> children) {
+        this.children = children;
+    }
+
+    public void setJobs(Map<Object, Object> jobs) {
+        this.jobs = jobs;
+    }
+
+    public void setMails(Properties mails) {
+        this.mails = mails;
+    }
+
+    public void setJobTime(Map<String, Integer> jobTime) {
+        this.jobTime = jobTime;
+    }
+
+    @Override
+    public String toString() {
+        return "Boss{" +
+                "name='" + name + '\'' +
+                ", car=" + car +
+                ", houseList=" + houseList +
+                ", children=" + children +
+                ", jobs=" + jobs +
+                ", mails=" + mails +
+                ", jobTime=" + jobTime +
+                '}';
+    }
+}
+~~~
+
+~~~xml
+    <!--集合类型参数注入-->
+    <bean id="house1" class="com.duck.pojo.House">
+        <property name="size" value="100"/>
+        <property name="address" value="大学城"/>
+    </bean>
+    <bean id="house2" class="com.duck.pojo.House">
+        <property name="size" value="120"/>
+        <property name="address" value="大学城"/>
+    </bean>
+    <bean id="child1" class="com.duck.pojo.Child">
+        <property name="name"><value>张三</value></property>
+        <property name="age" ><value>18</value></property>
+        <property name="sex" ><value>男</value></property>
+    </bean>
+    <bean id="child2" class="com.duck.pojo.Child">
+        <property name="name" value="李四" />
+        <property name="age"  value="16"/>
+        <property name="sex" value="男"/>
+    </bean>
+
+
+    <!--list集合-->
+    <bean id="myboss" class="com.duck.pojo.Boss">
+        <property name="name" value="boss"/>
+        <property name="car" ref="attributeWayCar"/>
+        <property name="houseList">
+            <list>
+                <ref bean="house1"/>
+                <ref bean="house2"/>
+            </list>
+        </property>
+    </bean>
+
+    <!--set集合-->
+    <bean id="myboss1" class="com.duck.pojo.Boss">
+        <property name="name" value="boss"/>
+        <property name="car" ref="attributeWayCar"/>
+        <property name="children">
+            <set>
+                <ref bean="child1"/>
+                <ref bean="child2"/>
+            </set>
+        </property>
+    </bean>
+
+    <!--Map集合-->
+    <bean id="myboss2" class="com.duck.pojo.Boss">
+        <property name="name" value="boss"/>
+        <property name="car" ref="attributeWayCar"/>
+        <property name="jobs">
+            <map>
+                <entry>
+                    <key><value>AM</value></key>
+                    <value>看书</value>
+                </entry>
+                <entry>
+                    <key><value>M</value></key>
+                    <value>睡觉</value>
+                </entry>
+            </map>
+        </property>
+    </bean>
+
+    <!--Properties-->
+    <bean id="myboss3" class="com.duck.pojo.Boss">
+        <property name="name" value="boss"/>
+        <property name="car" ref="attributeWayCar"/>
+        <property name="mails">
+            <props>
+                <prop key="jobMail">jobmail@job.com</prop>
+                <prop key="lifeMail">lifeMail@job.com</prop>
+            </props>
+        </property>
+    </bean>
+
+    <!--强类型集合-->
+    <bean id="myboss4" class="com.duck.pojo.Boss">
+        <property name="jobTime">
+            <map>
+                <entry>
+                    <key><value>AM</value></key>
+                    <value>2020070209</value>
+                </entry>
+                <entry>
+                    <key><value>PM</value></key>
+                    <value>2020070214</value>
+                </entry>
+            </map>
+        </property>
+    </bean>
+~~~
+
+
+
+
 
 ##### 2.2.3.2 构造函数注入
 
@@ -374,11 +552,275 @@ public class Car {
     </bean>
 ~~~
 
-#### 2.2.4 集合类型参数注入
+#### 2.2.4 整合多个配置文件
+
+​		对于一个大型应用来说，可能存在多个XML配置文件，在启动Spring容器时，可以通过一一个String数组指定这些配置文件。Spring 还允许通过<import>将多个配置文件引入到一一个文件中，进行配置文件的集成。这样，在启动Spring容器时，仅需指定这个合并好的配置文件即可。
+
+~~~xml
+<import resource="classpath:applicationContext1.xml"/>
+~~~
+
+​		对于大型应用来说，为了防止开发时配置文件的资源竞争，或者为了使模块便于拆卸，往往每个模块都拥有自己独立的配置文件。应用层面提供了一个整合的配置文件，通过<import>将各个模块整合起来。这样，在容器启动时，只需加载这个整合的配置文件即可。
+
+#### 2.2.5 Bean作用域
+
+​		在配置文件中定义Bean时，用户不但可以配置Bean的属性值及相互之间的依赖关系，还可以定义Bean的作用域。作用域将对Bean的生命周期和创建方式产生影响。
+
+##### 2.2.5.1 作用域介绍
+
+| 类型          | 说明                                                         |
+| ------------- | ------------------------------------------------------------ |
+| singleton     | 在Spring loC容器中仅存在一一个Bean实例，Bean 以单实例的方式存在。默认为singleton |
+| prototype     | 每次从容器中调用Bean 时，都返回一个新的实例，即每次调用getBean()时， 相当于执行new XxxBean()操作 |
+| request       | 每次HTTP请求都会创建一个新的Bean。该作用域仅适用于WebApplicationContext环境 |
+| session       | 同一个HTTP Session 共享一个Bean,不同的HTTP Session 使用不同的Bean。该作用域仅适用于WebApplicationContext环境 |
+| globalSession | 同一个全局Session 共享一个Bean， 一般用于Portlet 应用环境。该作用域仅适用于WebApplicationContext环境 |
+
+##### 2.2.5.2 与Web应用环境相关的Bean作用域
+
+如果用户使用Spring的WebApplicationContext,则可使用另外3种Bean的作用域:request. session 和globalSession。不过在使用这些作用域之前，**首先必须在Web容器中进行一些额外的配置**。
+
+* 在低版本的Web容器中(Servlet 2.3 之前)，用户可以使用HTTP请求过滤器进行
+
+~~~xml
+<web-app>
+<filter>
+<filter-name>requestContextFilter </filter-name>
+<filter-class>org . springframework . web . filter RequestContextFilter </filter-class>
+</filter>
+<filter-mapping>
+<filter-name>requestContextFilter</filter-name>
+<!--对所有的URL进行过滤拦截-->
+<url-pattern>/*</url-pattern>
+</filter-mapping>
+</web-app>
+~~~
+
+* 在高版本的Web容器中，则可以利用HTTP请求监听器进行配置。
+
+~~~xml
+<web-app>
+    <listener>
+        <listener-class>
+            org.springframework.web.context.request.RequestContextListener
+        </1istener-class>
+    </listener>
+     ...
+</web-app>
+~~~
+
+在WebApplicationContext初始化时，已经通过ContextLoaderListener (或ContextLoaderServlet)将Web容器与Spring容器进行了整合，为什么在这里又要引入-一个额外的RequestContextListener以支持Bean的另外3个作用域呢?通过分析两个监听器的源码，一切疑问就真相大白了，如下图。
+
+![image-20200702161258348](..\img-folder\image-20200702161258348.png)
+
+
+​		在整合Spring容器时使用ContextL oaderListener，它实现了ServletContextListener监听器接口，ServletContextListener 只负责监听Web容器启动和关闭的事件。而RequestContextListener实现了ServletRequestListener 监听器接口，该监听器监听HTTP请求事件，Web服务器接收的每一次请求都会通知该监听器。
+
+​		Spring容器启动和关闭操作由Web容器的启动和关闭事件触发，但如果Spring容器中的Bean需要request、session 和globalSession作用域的支持，Spring 容器本身就必须获得Web容器的HTTP请求事件，以HTTP请求事件“驱动”Bean作用域的控制逻辑。也就是说，通过配置RequestContextL istener, Spring 容器和Web容器的结合更加密切，Spring容器对Web容器中的“风吹草动”都能够察觉，因而就可以实施Web相应Bean作用域的控制了。
+
+​		当然，Spring完全可以提供一个既实现ServletContextListener又实现ServletContextListener接口的监听器，这样我们仅需配置-次就可以了。 探究Spring将二者分开的原因，可能出于两个方面的考虑:第一，考虑版本兼容的问题，毕竟针对Web应用的Bean作用域是从Spring2.0开始提供的；第二，这3种新增的Bean作用域的适用场合并不多，用户往往并不真的需要这些新增的Bean作用域。
+
+##### 2.2.5.3 小结
+
+​		除了以上5种预定义的Bean作用域外，Spring 还允许用户自定义Bean的作用域。可以先通过org.springframework.beans. factory.config.Scope接口定义新的作用域，再通过org.springframework. beans.factory.confg.CustomScopeConfigurer这个BeanFactoryPostProcessor注册自定义的Bean作用域。在一般的应用中，Spring 所提供的作用域已经能够满足应用的要求，用户很少需要自定义新的Bean作用域。
 
 
 
-#### 2.2.2 启动IoC容器的方式
+#### 2.2.6 基于注解的配置
+
+##### 2.2.6.1 使用注解定义bean
+
+​		不管是XML还是注解，它们都是表达Bean定义的载体，其实质都是为Spring容器提供Bean定义的信息，在表现形式上都是将XML定义的内容通过类注解进行描述。Spring 从2.0开始就引入了基于注解的配置方式，在2.5时得到了完善，在4.0时进一步增强。
+
+我们知道，Spring 容器成功启动的三大要件分别是Bean定义信息、Bean 实现类及Spring本身。如果采用基于XML的配置，则Bean定义信息和Bean实现类本身是分离的；而如果采用基于注解的配置文件，则Bean定义信息通过在Bean实现类上标注注解实现。
+下面是使用注解定义一个DAO的Bean:
+
+~~~java
+// ①
+@Component("userDao")
+public class UserDaoImpl {
+    // ...
+}
+~~~
+
+在①处使用@Component注解在UserDao类声明处对类进行标注，它可以被Spring容器识别，Spring容器自动将POJO转换为容器管理的Bean。
+它和以下XML配置是等效的:
+
+~~~xml
+<bean id="userDao" class="com.duck.dao.imp.UserDaoImpl"/>
+~~~
+
+除**@Component**外，Spring 还提供了**3个功能基本和@Component等效的注解**，分别用于对DAO、Service 及Web层的Controller进行注解。
+
+* **@Repository**: 用于对DAO实现类进行标注。
+* **@Service**: 用于对Service 实现类进行标注。
+
+* **@Controller**: 用于对Controller实现类进行标注。
+
+之所以要在@Component之外提供这3个特殊的注解，是为了让标注类本身的用途清晰化，完全可以用@Component替代这3个特殊的注解。但是，我们推荐使用特定的注解标注特定的Bean，毕竟这样一眼就可以看出Bean的真实身份。
+
+##### 2.2.6.2 扫描注解定义的Bean
+
+​		Spring提供了一个context命名空间，它提供了通过扫描类包以应用注解定义Bean的方式
+
+~~~xml
+<!--①声明context命名空间-->
+<beans  xmlns="http://www.springframework.org/schema/beans"
+        xmlns:context="http://www.springframework.org/schema/context"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.springframework.org/schema/beans
+            https://www.springframework.org/schema/beans/spring-beans.xsd
+            http://www.springframework.org/schema/context
+            https://www.springframework.org/schema/context/spring-context.xsd">
+
+    <!--②扫描注解定义的Bean-->
+    <context:component-scan base-package="com.duck"/>
+    
+</beans>    
+~~~
+
+​		在①处声明context命名空间，在②处即可通过context命名空间的component-scan的base-package属性指定一个需要扫描的基类包，Spring 容器将会扫描这个基类包里的所有类，并从类的注解信息中获取Bean的定义信息。
+如果仅希望扫描特定的类而非基包下的所有类，那么可以使用resource-pattern属性过滤出特定的类，如下:
+
+~~~xml
+<context:component-scan base-package="com.duck" resource-pattern="anno/*.class"/>
+~~~
+
+​		这里将基类包设置为com.smart; 默认情况下resource-pattern 属性的值为“**/* .class"，即基类包里的所有类，将其设置为“anno/* .class"，则Spring仅会扫描基类包里anno子包中的类。
+
+##### 2.2.6.3 自动装配Bean
+
+1. **@Autowired**注解进行依赖注入
+
+   **通过@Autowired注解实现Bean的依赖注入**，@Autowired 默认按类型(byType) 匹配的方式在容器中查找匹配的Bean,当有且仅有一个匹配的Bean时，Spring 将其注入@Autowired标注的变量中。
+
+   使用@Autowired的required属性
+   如果容器中没有一个和标注变量类型匹配的Bean，那么Spring容器启动时将报NoSuchBeanDefinitionException异常。如果希望Spring即使找不到匹配的Bean完成注入也不要抛出异常,那么可以使用@Autowired(required=false)进行标注。在默认情况下,@Autowired的required属性值为ture,即要求必须找到匹配的Bean,否则将报异常。
+
+   对类方法进行标注，@Autowired可以对类**成员变量**及**方法的入参**进行标注
+
+2. **@Qualifier**指定注入Bean的名称。
+   如果容器中有一个以上匹配的Bean时，则可以通过@Qualifier注解限定Bean的名称
+
+3. **@Lazy**注解对延迟依赖注入的支持
+   Spring 4.0支持延迟依赖注入，即在Spring容器启动的时候，对于在Bean上标注@Lazy及@Autowired注解的属性，不会立即注入属性值，而是延迟到调用此属性的时候才会注入属性值。
+
+4. **@Resource**、**@Inject**标准注解
+   此外，Spring还支持JSR-250中定义的**@Resource**和JSR-330中定义的**@Inject**注解，这两个标准注解和@Autowired注解的功用类似，都是对类变更及方法入参提供自动注入功能。@Resource 注解要求提供一个Bean名称的属性，如果属性为空，则自动采用标注处的变量名或方法名作为Bean的名称。（需要引入javax.annotation-api.jar包）
+
+   **@Autowired默认按类型匹配注入Bean**, **@Resource 则按名称匹配注入Bean**。而**@Inject和@Autowired同样也是按类型匹配注入Bean的，只不过它没有required**属性。可见，不管是@Resource还是@Inject注解，其功能都没有@Autowired丰富，因此，除非必要，大可不必在乎这两个注解。
+
+5. **@Scope**注解定义Bean作用范围
+
+   通过注解配置的Bean 和通过xml标签配置的Bean一样，默认的作用范围都是singleton。Spring 为注解配置提供了一个@Scope 注解，可以通过它显式指定Bean的作用范围。
+
+6. **@PostConstruct 、@PreDestroy**
+
+   **@PostConstruct 、@PreDestroy**注解分别定义Bean初始化和容器销毁前Bean执行的方法。这个跟使用xml标签<bean>的init-method、destroy-method时一样的效果。区别是，可以使用**@PostConstruct 、@PreDestroy** 标注多个方法。
+
+   
+
+   具体使用实例如下：
+
+   ~~~~java
+   @Lazy
+   @Scope("singleton")
+   @Repository("accountDao")
+   public class JdbcAccountDaoImpl implements AccountDao {
+   
+       @Autowired
+       private ConnectionUtils connectionUtils;
+       
+       // ...
+   }
+   
+   
+   @Service("transferService")
+   public class TransferServiceImpl implements TransferService {
+   
+       // @Autowired的required属性默认为true，要求必须匹配bean，否则报异常
+       // 如果希望Spring容器即使找不到匹配的bean注入，也不要抛异常，可以使用@Autowired(required=false)进行配置
+       // 容器中如果有一个以上相同类型的bean时，可以通过@Qualifier("beanId")来确定时哪哪一个
+       @Autowired
+       @Qualifier("accountDao")
+       private AccountDao accountDao;
+       
+       // ...
+   }
+   ~~~~
+
+   ~~~java
+   @Component
+   public class Dog {
+   
+       public Dog(){
+           System.out.println("Dog Constructor ...");
+       }
+   
+       @PostConstruct
+       public void init(){
+           System.out.println("dog init ...");
+       }
+   
+       @PostConstruct
+       public void init1(){
+           System.out.println("dog init1 ...");
+       }
+   
+       public void move(){
+           System.out.println("move");
+       }
+   
+       @PreDestroy
+       public void destroy(){
+           System.out.println("dog destroy ...");
+       }
+   
+       @PreDestroy
+       public void destroy1(){
+           System.out.println("dog destroy1 ...");
+       }
+   }
+   ~~~
+
+   
+
+#### 2.2.7 基于java类的配置
+
+具体，见《精通Spring 4.x 企业应用实战开发》5.11
+
+#### 2.2.8 lazy-Init延迟加载
+
+* **Bean的延迟加载**
+
+  ApplicationContext容器的默认行为是在启动服务器时将所有singleton bean提前进行实例化。提前
+  实例化意味着作为初始化过程的一部分。
+
+  ~~~xml
+  <bean id="connectionUtils" class="com.duck.utils.ConnectionUtils"></bean>
+  该bean默认设置为：
+  <bean id="connectionUtils" class="com.duck.utils.ConnectionUtils" lazy-init="false"></bean>
+  ~~~
+
+  lazy-init="false"，立即加载，表示在spring启动时， 立刻进行实例化。如果不想让一个singleton bean在ApplicationContext实现初始化时被提前实例化，那么可以将bean设置为延迟实例化。
+
+  ~~~xml
+  <bean id="connectionUtils" class="com.duck.utils.ConnectionUtils" lazy-init="true"></bean>
+  ~~~
+
+  ​        设置lazy-init为true的bean将不会在ApplicationContext启动时提前被实例化，而是第一次向容器通过getBean索取bean时实例化的。
+  ​		如果一个设置了立即加载的bean1,引用了一个延迟加载的bean2，那么bean1在容器启动时被实例化，而bean2由于被bean1引用，所以也被实例化，这种情况也符合延时加载的bean在第一次调用时才被实例化的规则。
+  ​		**如果一个bean的scope属性为scope="pototype"时，即使设置了lazy-init="false"， 容器启动时也不**
+  **会实例化bean，而是在调用getBean方法时实例化的。**
+
+* **延迟加载应用场景**：
+
+  （1）开启延迟加载一 定程度提高容器启动和运转性能
+
+  （2）对于不常使用的Bean设置延迟加载，这样偶尔使用的时候再加载，不必要从一开始该Bean就占
+  用资源
+
+#### 2.2.8 启动IoC容器的方式
 
 * JavaSE环境下启动IoC容器
 
@@ -434,7 +876,7 @@ public class Car {
   </web-app>
   ~~~
 
-#### 2.2.3 BeanFactory和ApplicationContext区别
+#### 2.2.9 BeanFactory和ApplicationContext区别
 
 ​		Spring通过一个配置文件描述Bean及Bean之间的依赖关系，利用Java语言的反射功能实例化Bean并建立Bean之间的依赖关系。Spring 的IoC容器在完成这些底层工作的基础上，还提供了Bean实例缓存、生命周期管理、Bean实例代理、事件发布、资源装载等高级服务。
 
@@ -446,11 +888,227 @@ public class Car {
 
 ![image-20200629173330550](..\img-folder\image-20200629173330550.png)
 
-#### 
+#### 2.2.10 BeanFactory 和FactoryBean的区别
+
+​		BeanFactory接口是容器的顶级接口，定义了容器的一些基础行为，负责生产和管理Bean的一个工厂,具体使用它下面的子接口类型，比如ApplicationContext。
+
+​		Spring中Bean有两种，一种是普通Bean，一种是工厂Bean (FactoryBean) ，FactoryBean可以生成某一个类型的Bean实例(返回给我们)， 也就是说我们可以借助于它自定义Bean的创建过程。Bean创建的三种方式中的静态方法和实例化方法和FactoryBean作用类似，FactoryBean使用较多， 尤其在Spring框架一些组件中会使用， 还有其他框架和Spring框架整合时使用。可以让我们自定义Bean的创建过程(完成复杂Bean的定义)
+
+~~~java
+//FactoryBean接口源码
+public interface FactoryBean<T> {
+@Nullable
+	//返回FactoryBean创建的Bean实例，如果isSingleton返回true,则该实例会放到Spring容器
+    //的单例对象缓存池中Map
+	T getObject( ) throws Exception;
+	@Nullable
+	//返回FactoryBean创建 的Bean类型
+	Class<?> getobjectType();
+	//返回作用域是否单例
+	default boolean isSingleton() {
+	return true;
+}
+~~~
+
+~~~java
+public class Company {
+	private String name;
+	private String address;
+	private int scale;
+	
+    public String getName() {
+		return name;CompanyFactoryBean类
+	}
+    public void setName(String name) {
+    	this.name = name;
+    }
+    public String getAddress() {
+    	return address;
+    }
+    public void setAddress(String address) {
+    	this.address = address;
+    }
+    public int getScale() {
+    	return scale;
+    }
+    public void setScale(int scale) {
+    	this.scale = scale;
+    }
+    
+    
+    @Override
+    public String toString() {
+        return "Company{" +
+        "name='" + name + '\'' +
+        ", address='" + address + '\'' +
+        ", scale=" + scale +
+        '}';
+    }
+}
+~~~
+
+~~~java
+public class CompanyFactoryBean implements FactoryBean<Company> {
+    private String companyInfo; // 公司名称,地址,规模
+    public void setCompanyInfo(String companyInfo) {
+        this.companyInfo = companyInfo;
+    }
+    
+    @Override
+    public Company getObject() throws Exception {
+        // 模拟创建复杂对象Company
+        Company company = new Company();
+        String[] strings = companyInfo.split(",");
+        company.setName(strings[0]);
+        company.setAddress(strings[1]);
+        company.setScale(Integer.parseInt(strings[2]));
+        return company;
+    }
+    
+    @Override
+    public Class<?> getObjectType() {
+        return Company.class;
+    }
+    
+    @Override
+    public boolean isSingleton() {
+        return true;
+    }
+}
+~~~
+
+~~~xml
+<bean id="companyBean" class="com.duck.factory.CompanyFactoryBean">
+	<property name="companyInfo" value="百度,中关村,500"/>
+</bean>
+~~~
+
+~~~java
+Object companyBean = applicationContext.getBean("companyBean");
+System.out.println("bean:" + companyBean);
+// 结果如下
+bean:Company{name='拉勾', address='中关村', scale=500}
+
+// 测试，获取FactoryBean，需要在id之前添加“&
+Object companyBean = applicationContext.getBean("&companyBean");
+System.out.println("bean:" + companyBean);
+// 结果如下
+bean:com.lagou.edu.factory.CompanyFactoryBean@53f6fd09
+~~~
+
+#### 2.2.11 后置处理器
+
+Spring提供了两种后处理bean的扩展接口，分别为**BeanPostProcessor**和**BeanFactoryPostProcessor**,两者在使用上是有所区别的。
+
+工厂初始化（BeanFactory） —> Bean对象
+
+在BeanFactory初始化之后可以使用BeanFactoryPostProcessor进行后置处理做一些事情
+
+在Bean对象实例化（并不是Bean的整个生命周期完成）之后可以使用BeanPostProcessor进行后置处
+理，做一些事情。
+
+注意: 对象不一定是springbean,而springbean一定是个对象
+SpringBean的生命周期
+
+* **BeanPostProcessor**
+
+  BeanPostProcessor是针对Bean级别的处理，可以针对某个具体的Bean。
+
+  ~~~java
+  public interface BeanPostProcessor {
+  	@Nullable
+  	default Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
+  		return bean;
+  	}
+      
+  		@Nullable
+  	default Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
+  		return bean;
+  	}
+  	}
+  ~~~
+
+  该接⼝提供了两个⽅法，分别在Bean的初始化⽅法前和初始化⽅法后执⾏，具体这个初始化⽅法指的是
+  什么⽅法，类似我们在定义bean时，定义了init-method所指定的⽅法。
+  **定义⼀个类实现了BeanPostProcessor，默认是会对整个Spring容器中所有的bean进⾏处理**。**如果要对**
+  **具体的某个bean处理，可以通过⽅法参数判断**，两个类型参数分别为Object和String，第⼀个参数是每
+  个bean的实例，第⼆个参数是每个bean的name或者id属性的值。所以我们可以通过第⼆个参数，**来判**
+  **断我们将要处理的具体的bean**。
+  注意：处理是发⽣在Spring容器的实例化和依赖注⼊之后。  
+
+* **BeanFactoryPostProcessor**  
+
+  BeanFactory级别的处理，是针对整个Bean的⼯⼚进⾏处理，典型应⽤:PropertyPlaceholderConfigurer  
+
+  ~~~java
+  // 源码
+  @FunctionalInterface
+  public interface BeanFactoryPostProcessor {
+      void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException;
+  }
+  ~~~
+
+  此接⼝只提供了⼀个⽅法，⽅法参数为ConfigurableListableBeanFactory，该参数类型定义了⼀些⽅法  
+
+  ![image-20200702210006356](..\img-folder\image-20200702210006356.png)
+
+  其中有个⽅法名为getBeanDefinition的⽅法，我们可以根据此⽅法，找到我们定义bean 的BeanDefinition对象。然后我们可以对定义的属性进⾏修改，以下是BeanDefinition中的⽅法  
+
+  <img src="..\img-folder\image-20200702210123151.png" alt="image-20200702210123151" style="zoom:100%;" />
+
+  ⽅法名字类似我们bean标签的属性， setBeanClassName对应bean标签中的class属性，所以当我们拿
+  到BeanDefinition对象时，我们可以⼿动修改bean标签中所定义的属性值。
+  BeanDefinition对象： 我们在 XML 中定义的 bean标签， Spring 解析 bean 标签成为⼀个 JavaBean，
+  这个JavaBean 就是 BeanDefinition
+  注意：调⽤ BeanFactoryPostProcessor ⽅法时，这时候bean还没有实例化，此时 bean 刚被解析成
+  BeanDefinition对象  
+
+#### 2.2.12 属性编辑器
+
+​		在Spring配置文件里，往往通过字面值为Bean各种类型的属性提供设置值:不管是double类型还是int类型，在配置文件中都对应字符串类型的字面值。BeanWrapper在填充Bean属性时如何将这个字面值正确地转换为对应的double或int等内部类型呢?我们可以隐约地感觉到一定有一个转换器在“暗中相助”，这个转换器就是属性编辑器。
+
+具体，见《精通Spring 4.x 企业应用实战开发》6.2
+
+#### 2.2.13 使用外部属性文件
+
+在进行数据源或邮件服务器等资源的配置时,用户可以直接在Spring配置文件中配置用户名/密码、链接地址等信息。但一种更好的做法是将这些配置信息独立到一个外部属性文件中，并在Spring配置文件中通过形如$ {user}、$ {password}的占位符引用属性文件中的属性项。这种配置方式拥有两个明显的好处。
+
+* 减少维护的工作量:资源的配置信息可以被多个应用共享，在多个应用使用同一资源的情况下，如果资源用户名/密码、链接地址等配置信息发生更改，则用户只需调整独立的属性文件即可。
+* 使部署更简单: Spring配置文件主要描述应用工程中的Bean, 这些配置信息在开发完成后就基本固定下来了。但数据源、邮件服务器等资源配置信息却需要在部署时根据现场情况确定。如果通过一个独立的属性文件存放这些配置信息，则部署人员只需调整这个属性文件即可，根本不需要关注结构复杂、信息量大的Spring配置文件。这不仅给部署和维护带来了方便，也降低了出错的概率。
+
+Spring提供了一个 PropertyPlaceholderConfigurer,它能够使Bean在配置时引用外部属性文件。PropertyPlaceholderConfigurer 实现了BeanFactoryPostProcessorBean 接口，因而也是一个Bean工厂后处理器。
+
+~~~xml
+<!--引入jdbc.properties属性文件-->
+<bean class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer"
+    p:location="classpath:jdbc.properties"
+    p:fileEncoding="utf-8"/>
+
+<!--通过属性名引用属性值-->
+<bean id="dataSource" class="org.apache .commons.dbcp.BasicDataSource"
+    destroy-method="close"
+    p:driverClassName="$ {driverClassName}"
+    p:url="${ur1}"
+    p:username-"${userName}"
+    p:password="${password}"/>
 
 
 
+~~~
 
+具体，见《精通Spring 4.x 企业应用实战开发》6.3
+
+#### 2.2.14 国际化
+
+具体，见《精通Spring 4.x 企业应用实战开发》6.4
+
+#### 2.2.15 容器事件
+
+具体，见《精通Spring 4.x 企业应用实战开发》6.5
+
+#### 2.2.16 Spring容器技术内幕
+
+具体，见《精通Spring 4.x 企业应用实战开发》6.1
 
 ### 2.3 源码剖析
 
