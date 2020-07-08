@@ -1112,7 +1112,183 @@ Spring提供了一个 PropertyPlaceholderConfigurer,它能够使Bean在配置时
 
 ### 2.3 源码剖析
 
+#### 2.3.1 Bean的生命周期
 
+​		由于Bean的生命周期所经历的阶段比较多，下面将通过图形化的方式描述了BeanFactory中Bean生命周期的完整过程。
+
+![image-20200708215214603](E:\lagou\高级工程师训练营\学习笔记\docs\img-folder\image-20200708215214603.png)
+
+
+
+​		Bean的完整生命周期从Spring容器着手实例化Bean开始，直到最终销毁Bean。**整个生命周期有四个大的关键点，依次为实例化、设置属性值、初始化、容器销毁。每个关键点及关键点前后都涉及特定的方法调用**，可以将这些方法大致划分为4类。
+
+* Bean自身的方法：如调用Bean构造函数实例化Bean、调用Setter设置Bean的属性值及通过<bean>的init-method和destroy-method所指定的方法。
+
+* Bean 级生命周期接口方法：如**BeanNameAware**、**BeanFactoryAware**、 **InitializingBean**和**DisposableBean**，这些接口方法由Bean类直接实现。
+
+  **Aware类型的接口的作用就是让我们能够拿到Spring容器中的一些资源**。基本都能够见名知意，Aware之前的名字就是可以拿到什么资源，例如`BeanNameAware`可以拿到BeanName，以此类推。调用时机需要注意：所有的Aware方法都是在初始化阶段之前调用的！
+
+* 容器级生命周期接口方法：在上图中带“★”的步骤是由**InstantiationAwareBeanPostProcessor**和**BeanPostProcessor**这两个接口实现的，一般称它们的实现类为“后处理器”。**后处理器**接口一般不由Bean 本身实现，它们独立于Bean，实现类以容器附加装置的形式**注册到Spring 容器**中，并通过接口反射为Spring容器扫描识别。当Spring容器创建任何Bean的时候，这些后处理器都会发生作用，所以这些后处理器的影响是全局性的。当然，用户可以**通过合理地编写后处理器，让其仅对感兴趣的Bean进行加工处理**。Spring内部扩展也经常使用这些接口，例如自动注入以及AOP的实现都和他们有关。
+
+* 工厂后处理器接口方法：包括**AspectJWeavingEnabler**、**CustomAutowireConfigurer**、**ConfigurationClassPostProcessor**等方法。工厂后处理器也是容器级的，在应用上下文装配配置文件后立即调用。
+
+​       **Bean级生命周期接口**和**容器级生命周期接口**是个性和共性辩证统一思想的体现，**前者解决Bean个性化处理的问题，而后者解决容器中某些Bean共性化处理的问题**。Spring容器中是否可以注册多个后处理器呢？答案是肯定的。只要它们同时实现org.springframework.core.Ordered接口，容器将按特定的顺序依次调用这些后处理器。所以上图中带“★”的步骤都可能调用多个后处理器进行一系列加工操作。InstantiationAwareBeanPostProcessor其实是BeanPostProcessor接口的子接口，Spring为其提供了一个适配器类 InstantiationAwareBeanPostProcessorAdapter，一般情况下， 可以方便地扩展该适配器覆盖感兴趣的方法以定义实现类。
+
+#### 2.3.2 BeanPostProcessor 注册时机与执行顺序
+
+##### 2.3.2.1 注册时机		
+
+​		BeanPostProcessor也会注册为Bean，那么Spring是如何保证BeanPostProcessor在业务Bean之前完成初始化的呢？ 请看refresh()方法的源码，省略部分无关代码：
+
+~~~java
+@Override
+    public void refresh() throws BeansException, IllegalStateException {
+        synchronized (this.startupShutdownMonitor) {
+
+            try {
+                // Allows post-processing of the bean factory in context subclasses.
+                postProcessBeanFactory(beanFactory);
+
+                // Invoke factory processors registered as beans in the context.
+                invokeBeanFactoryPostProcessors(beanFactory);
+
+                // Register bean processors that intercept bean creation.
+                // 所有BeanPostProcesser初始化的调用点
+                registerBeanPostProcessors(beanFactory);
+
+                // Initialize message source for this context.
+                initMessageSource();
+
+                // Initialize event multicaster for this context.
+                initApplicationEventMulticaster();
+
+                // Initialize other special beans in specific context subclasses.
+                onRefresh();
+
+                // Check for listener beans and register them.
+                registerListeners();
+
+                // Instantiate all remaining (non-lazy-init) singletons.
+                // 所有单例非懒加载Bean的调用点
+                finishBeanFactoryInitialization(beanFactory);
+
+                // Last step: publish corresponding event.
+                finishRefresh();
+            }
+
+    }
+~~~
+
+​		可以看出，Spring是先执行registerBeanPostProcessors()进行BeanPostProcessors的注册，然后再执行finishBeanFactoryInitialization初始化单例非懒加载的Bean。
+
+##### 2.3.2.2 执行顺序
+
+BeanPostProcessor有很多个，而且每个BeanPostProcessor都影响多个Bean，其执行顺序至关重要，必须能够控制其执行顺序才行。关于执行顺序这里需要引入两个排序相关的接口：PriorityOrdered、Ordered
+
+- PriorityOrdered是一等公民，首先被执行，PriorityOrdered公民之间通过接口返回值排序
+- Ordered是二等公民，然后执行，Ordered公民之间通过接口返回值排序
+- 都没有实现是三等公民，最后执行
+
+在以下源码中，可以很清晰的看到Spring注册各种类型BeanPostProcessor的逻辑，根据实现不同排序接口进行分组。优先级高的先加入，优先级低的后加入。
+
+~~~java
+// First, invoke the BeanDefinitionRegistryPostProcessors that implement PriorityOrdered.
+// 首先，加入实现了PriorityOrdered接口的BeanPostProcessors，顺便根据PriorityOrdered排了序
+            String[] postProcessorNames =                    beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
+            for (String ppName : postProcessorNames) {
+                if (beanFactory.isTypeMatch(ppName, PriorityOrdered.class)) {
+                    currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
+                    processedBeans.add(ppName);
+                }
+            }
+            sortPostProcessors(currentRegistryProcessors, beanFactory);
+            registryProcessors.addAll(currentRegistryProcessors);
+            invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
+            currentRegistryProcessors.clear();
+
+            // Next, invoke the BeanDefinitionRegistryPostProcessors that implement Ordered.
+// 然后，加入实现了Ordered接口的BeanPostProcessors，顺便根据Ordered排了序
+            postProcessorNames = beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
+            for (String ppName : postProcessorNames) {
+                if (!processedBeans.contains(ppName) && beanFactory.isTypeMatch(ppName, Ordered.class)) {
+                    currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
+                    processedBeans.add(ppName);
+                }
+            }
+            sortPostProcessors(currentRegistryProcessors, beanFactory);
+            registryProcessors.addAll(currentRegistryProcessors);
+            invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
+            currentRegistryProcessors.clear();
+
+            // Finally, invoke all other BeanDefinitionRegistryPostProcessors until no further ones appear.
+// 最后加入其他常规的BeanPostProcessors
+            boolean reiterate = true;
+            while (reiterate) {
+                reiterate = false;
+                postProcessorNames = beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
+                for (String ppName : postProcessorNames) {
+                    if (!processedBeans.contains(ppName)) {
+                        currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
+                        processedBeans.add(ppName);
+                        reiterate = true;
+                    }
+                }
+                sortPostProcessors(currentRegistryProcessors, beanFactory);
+                registryProcessors.addAll(currentRegistryProcessors);
+                invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
+                currentRegistryProcessors.clear();
+            }
+~~~
+
+根据排序接口返回值排序，默认升序排序，返回值越低优先级越高。
+
+~~~java
+    /**
+     * Useful constant for the highest precedence value.
+     * @see java.lang.Integer#MIN_VALUE
+     */
+    int HIGHEST_PRECEDENCE = Integer.MIN_VALUE;
+
+    /**
+     * Useful constant for the lowest precedence value.
+     * @see java.lang.Integer#MAX_VALUE
+     */
+    int LOWEST_PRECEDENCE = Integer.MAX_VALUE;
+~~~
+
+PriorityOrdered、Ordered接口作为Spring整个框架通用的排序接口，在Spring中应用广泛，也是非常重要的接口。
+
+### 2.4 总结
+
+Spring Bean的生命周期分为`四个阶段`和`多个扩展点`。扩展点又可以分为`影响多个Bean`和`影响单个Bean`。
+
+整理如下：
+
+ 四个阶段
+
+- 实例化 Instantiation
+- 设置属性值 Populate
+- 初始化 Initialization
+- 容器销毁 Destruction
+
+多个扩展点
+
+- 影响多个Bean（容器级接口）
+  - BeanPostProcessor
+  - InstantiationAwareBeanPostProcessor
+- 影响单个Bean（Bean级接口）
+  - Aware
+    - Aware Group1
+      - BeanNameAware
+      - BeanClassLoaderAware
+      - BeanFactoryAware
+    - Aware Group2
+      - EnvironmentAware
+      - EmbeddedValueResolverAware
+      - ApplicationContextAware(ResourceLoaderAware\ApplicationEventPublisherAware\MessageSourceAware)
+  - 生命周期
+    - InitializingBean
+    - DisposableBean
 
 ## 第三部分 AOP
 
@@ -1231,6 +1407,18 @@ public class ForumService {
 
 ### 3.6 源码剖析
 
+
+
+## 第三部分 Sprng事务管理
+
+具体，见《精通Spring 4.x 企业应用实战开发》11、12
+
+## 第四部分 Spring缓存
+
+具体，见《精通Spring 4.x 企业应用实战开发》15
+
 ## 参考资料
 
 《精通Spring 4.x 企业应用开发实战》 — 陈雄花 林开雄 文建国 编著
+
+SpringBean的生命周期 https://www.jianshu.com/p/1dec08d290c1
