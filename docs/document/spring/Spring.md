@@ -42,7 +42,7 @@ Spring给我带来以下好处
 
 ​		Spring核心框架由4000多个类组成，整个框架按其所属功能可以划分为5个主要模块，从整体来看，这5个主要模块几乎为企业应用提供了所需的一切，从持久层、业务层到展现层都拥有相应的支持。loC和AOP是Spring所依赖的根本。在此基础上，**Spring 整合了各种企业应用开源框架和许多优秀的第三方类库，成为Java企业应用full-stack 的开发框架**。**Spring 框架的精妙之处在于对于开发者拥有自由的选择权**，Spring不会将自己的意志强加给开发者，因为针对某个领域的问题，**Spring 往往支持多种实现方案**。当希望选用不同的实现方案时，Spring 又能保证过渡的平滑性。
 
-![image-20200629114302424](..\img-folder\image-20200629114302424.png)
+![image-20200629114302424](..\..\img-folder\image-20200629114302424.png)
 
 #### 1.3.1 loC
 ​		Spring核心模块实现了IoC的功能，它将类与类之间的依赖从代码中脱离出来，用配置的方式进行依赖关系描述，由IoC容器负责依赖类之间的创建、拼接、管理、获取等工作。BeanFactory 接口是Spring框架的核心接口，它实现了容器许多核心的功能。
@@ -75,17 +75,17 @@ Spring给我带来以下好处
 
 **Spring Framework 版本**
 
-![image-20200629123149385](..\img-folder\image-20200629123149385.png)
+![image-20200629123149385](..\..\img-folder\image-20200629123149385.png)
 
 Spring Framework不同版本对jdk的要求
 
-![image-20200629123310085](..\img-folder\image-20200629123310085.png)
+![image-20200629123310085](..\..\img-folder\image-20200629123310085.png)
 
 ### 1.5 Spring子项目
 
 ​		Spring官方网站htp://spring.io/projects，可以看到Spring众多的子项目，它们构建起一个丰富的企业级应用解决方案的生态系统。在这个生态系统中，除Spring框架本身外，还有很多值得关注的子项目。从配置到安全，从普通Web应用到大数据，用户在构建应用基础设施的时候，总能从Spring子项目中找到一个适合自己的子项目。对Spring应用开发者来说，了 解这些子项目，可以更好地使用Spring;也可以通过阅读这些子项目的源代码，更深入地了解Spring的设计架构和实现原理。
 
-![image-20200629123521879](..\img-folder\image-20200629123521879.png)
+![image-20200629123521879](..\..\img-folder\image-20200629123521879.png)
 
 ### 1.6 小结
 
@@ -117,7 +117,7 @@ Spring Framework不同版本对jdk的要求
 
 ​	解决对象之间的耦合问题
 
-![image-20200629150811133](..\img-folder\image-20200629150811133.png)
+![image-20200629150811133](..\..\img-folder\image-20200629150811133.png)
 
 #### 2.1.3 IoC和DI的区别
 
@@ -159,7 +159,7 @@ Bean配置信息是Bean的元数据信息，它由以下4个方面组成：
 
 ​		下图描述了Spring容器、Bean 配置信息、Bean 实现类及应用程序四者的相互关系。
 
-![image-20200630144614861](..\img-folder\image-20200630144614861.png)
+![image-20200630144614861](..\..\img-folder\image-20200630144614861.png)
 
 ##### 2.2.1.2 基于xml的配置文件介绍
 
@@ -168,7 +168,7 @@ Bean配置信息是Bean的元数据信息，它由以下4个方面组成：
 ​		对于基于XML的配置，Spring 1.0的配置文件采用DTD格式，Spring 2.0以后采用Schema格式，后者让不同类型的配置拥有了自己的命名空间，使得配置文件更具扩展性。此外，Spring 基于Schema配置方案为许多领域的问题提供了简化的配置方法，配置工作因此得到了大幅简化。
 ​		采取基于Schema的配置格式，文件头的声明会复杂一些，先看一个简单的示例，如下:
 
-![image-20200630145700215](..\img-folder\image-20200630145700215.png)
+![image-20200630145700215](..\..\img-folder\image-20200630145700215.png)
 
 ​		要了解文件头所声明的内容，需要学习一些**XML Schema** 的知识。Schema 在文档根节点中通过xmlns对文档所引用的命名空间进行声明。在上面的代码中定义了3个命名空间。
 
@@ -319,7 +319,7 @@ public class Car {
 
 测试结果
 
-![image-20200630163214831](..\img-folder\image-20200630163214831.png)
+![image-20200630163214831](..\..\img-folder\image-20200630163214831.png)
 
 ② **JavaBean关于属性命名的规范**
 
@@ -1050,11 +1050,11 @@ SpringBean的生命周期
 
   此接⼝只提供了⼀个⽅法，⽅法参数为ConfigurableListableBeanFactory，该参数类型定义了⼀些⽅法  
 
-  ![image-20200702210006356](..\img-folder\image-20200702210006356.png)
+  ![image-20200702210006356](..\..\img-folder\image-20200702210006356.png)
 
   其中有个⽅法名为getBeanDefinition的⽅法，我们可以根据此⽅法，找到我们定义bean 的BeanDefinition对象。然后我们可以对定义的属性进⾏修改，以下是BeanDefinition中的⽅法  
 
-  <img src="..\img-folder\image-20200702210123151.png" alt="image-20200702210123151" style="zoom:100%;" />
+  <img src="..\..\img-folder\image-20200702210123151.png" alt="image-20200702210123151" style="zoom:100%;" />
 
   ⽅法名字类似我们bean标签的属性， setBeanClassName对应bean标签中的class属性，所以当我们拿
   到BeanDefinition对象时，我们可以⼿动修改bean标签中所定义的属性值。
@@ -1116,7 +1116,7 @@ Spring提供了一个 PropertyPlaceholderConfigurer,它能够使Bean在配置时
 
 ​		由于Bean的生命周期所经历的阶段比较多，下面将通过图形化的方式描述了BeanFactory中Bean生命周期的完整过程。
 
-![image-20200708215214603](E:\lagou\高级工程师训练营\学习笔记\docs\img-folder\image-20200708215214603.png)
+![image-20200708215214603](..\..\img-folder\image-20200708215214603.png)
 
 
 
@@ -1339,7 +1339,7 @@ public class ForumService {
 
 ​		假设将ForumService 业务类看成一段圆木， 将removeTopic()和createForum()方法分别看成圆木的一截，会发现性能监视和事务管理的代码就好像一个年轮，而业务代码是圆木的树心，这也正是横切代码概念的由来。
 
-![image-20200706103511383](..\img-folder\image-20200706103511383.png)
+![image-20200706103511383](..\..\img-folder\image-20200706103511383.png)
 
 ​		我们无法通过抽象父类的方式消除如上所示的重复性横切代码，因为这些横切逻辑依附在业务类方法的流程中，它们不能转移到其他地方去。AOP独辟蹊径,通过横向抽取机制为这类无法通过纵向继承体系进行抽象的重复性代码提供了解决方案。
 
