@@ -1258,6 +1258,10 @@ BeanPostProcessor有很多个，而且每个BeanPostProcessor都影响多个Bean
 
 PriorityOrdered、Ordered接口作为Spring整个框架通用的排序接口，在Spring中应用广泛，也是非常重要的接口。
 
+### 2.4 循环依赖
+
+
+
 ### 2.4 总结
 
 Spring Bean的生命周期分为`四个阶段`和`多个扩展点`。扩展点又可以分为`影响多个Bean`和`影响单个Bean`。
@@ -1409,11 +1413,35 @@ public class ForumService {
 
 
 
-## 第三部分 Sprng事务管理
+## 第四部分 Spring事务管理
+
+### 4.1 声明式事务
+
+声明式事务是 springAOP 思想的⼀种应⽤  
+
+@EnableTransactionManagement 注解
+
+* 通过@import引⼊了TransactionManagementConfigurationSelector类它的selectImports⽅法导⼊了另外两个类： AutoProxyRegistrar和ProxyTransactionManagementConfiguration
+
+* AutoProxyRegistrar类分析
+  ⽅法registerBeanDefinitions中，引⼊了其他类，通过AopConfigUtils.registerAutoProxyCreatorIfNecessary(registry)引⼊InfrastructureAdvisorAutoProxyCreator，它继承了AbstractAutoProxyCreator，是⼀个后置处理器类
+
+ 
+
+* ProxyTransactionManagementConfiguration 是⼀个添加了@Configuration注解的配置类
+  （注册bean）
+  注册事务增强器（注⼊属性解析器、事务拦截器）
+
+  * 属性解析器： AnnotationTransactionAttributeSource，内部持有了⼀个解析器集合Set<TransactionAnnotationParser> annotationParsers;
+    具体使⽤的是SpringTransactionAnnotationParser解析器，⽤来解析@Transactional的事务属性
+
+  * 事务拦截器： TransactionInterceptor实现了MethodInterceptor接⼝，该通⽤拦截会在产⽣代理对象之前和aop增强合并，最终⼀起影响到代理对象
+
+  * TransactionInterceptor的invoke⽅法中invokeWithinTransaction会触发原有业务逻辑调⽤（增强事务）  
 
 具体，见《精通Spring 4.x 企业应用实战开发》11、12
 
-## 第四部分 Spring缓存
+## 第五部分 Spring缓存
 
 具体，见《精通Spring 4.x 企业应用实战开发》15
 
