@@ -1570,7 +1570,7 @@ INSERT INTO `sys_user_role` VALUES (2, 2);
             o.total
         from
             user u
-            left join orders o on u.id = o.uid;
+            left join orders o on u.id = o.uid
     </select>
 ~~~
 
